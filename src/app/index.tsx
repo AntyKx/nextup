@@ -7,9 +7,10 @@ import { AppIcon } from '@/components/app-icon';
 import { BottomNav } from '@/components/bottom-nav';
 import { EmptyState } from '@/components/empty-state';
 import { LifeItemCard } from '@/components/life-item-card';
+import { useCompleteWithUndo } from '@/components/use-complete-with-undo';
 import { fonts, palette } from '@/constants/design';
 import { useLifeItems } from '@/features/life-items/life-items-context';
-import { daysUntil, sortByDueDate } from '@/features/life-items/life-items-utils';
+import { daysUntil, formatDueStatus, sortByDueDate } from '@/features/life-items/life-items-utils';
 
 function todayLabel() {
   return new Intl.DateTimeFormat('zh-TW', {
@@ -20,9 +21,14 @@ function todayLabel() {
 }
 
 export default function HomeScreen() {
-  const { items, isLoading, completeItem } = useLifeItems();
+  const { items, isLoading, error } = useLifeItems();
+  const completeWithUndo = useCompleteWithUndo();
   const activeItems = useMemo(() => items.filter((item) => !item.completedAt).sort(sortByDueDate), [items]);
-  const urgentItems = activeItems.filter((item) => daysUntil(item.dueDate) <= 30);
+  const overdueItems = activeItems.filter((item) => daysUntil(item.dueDate) < 0);
+  const upcomingItems = activeItems.filter((item) => {
+    const days = daysUntil(item.dueDate);
+    return days >= 0 && days <= 30;
+  });
   const previewItems = activeItems.slice(0, 4);
   const nearest = activeItems[0];
 
@@ -49,6 +55,12 @@ export default function HomeScreen() {
 
           <Text style={styles.intro}>把該續、該換、該處理的事，安穩地放在這裡。</Text>
 
+          {error ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.overview}>
             <View style={styles.overviewTop}>
               <View style={styles.overviewIcon}>
@@ -60,13 +72,16 @@ export default function HomeScreen() {
               </Pressable>
             </View>
             <View style={styles.overviewMain}>
-              <Text style={styles.overviewNumber}>{urgentItems.length}</Text>
+              <Text style={styles.overviewNumber}>{upcomingItems.length}</Text>
               <Text style={styles.overviewUnit}>件待處理事項</Text>
             </View>
+            {overdueItems.length > 0 ? (
+              <Text style={styles.overdueText}>已逾期 {overdueItems.length} 項，優先處理一下吧</Text>
+            ) : null}
             <View style={styles.overviewDivider} />
             <Text style={styles.nearestLabel}>最近一項</Text>
             <Text style={styles.nearestText} numberOfLines={1}>
-              {nearest ? `${nearest.title} · ${Math.max(daysUntil(nearest.dueDate), 0)} 天後` : '目前沒有待處理事項'}
+              {nearest ? `${nearest.title} · ${formatDueStatus(daysUntil(nearest.dueDate))}` : '目前沒有待處理事項'}
             </Text>
           </View>
 
@@ -83,7 +98,7 @@ export default function HomeScreen() {
                 <LifeItemCard
                   key={item.id}
                   item={item}
-                  onComplete={completeItem}
+                  onComplete={completeWithUndo}
                   showDivider={index < previewItems.length - 1}
                 />
               ))}
@@ -116,6 +131,8 @@ const styles = StyleSheet.create({
   iconButton: { width: 44, height: 44, borderRadius: 16, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.55 },
   intro: { color: palette.muted, fontSize: 14, lineHeight: 21, fontFamily: fonts.body, marginTop: 12, marginBottom: 24 },
+  errorBanner: { backgroundColor: '#F6E1D6', borderRadius: 14, padding: 14, marginBottom: 16 },
+  errorText: { color: palette.danger, fontSize: 12.5, fontFamily: fonts.bodyMedium },
   overview: {
     backgroundColor: palette.surface,
     borderRadius: 22,
@@ -134,6 +151,7 @@ const styles = StyleSheet.create({
   overviewMain: { flexDirection: 'row', alignItems: 'baseline', marginTop: 16 },
   overviewNumber: { color: palette.ink, fontSize: 42, lineHeight: 46, fontFamily: fonts.display },
   overviewUnit: { color: palette.ink, fontSize: 14.5, fontFamily: fonts.bodySemibold, marginLeft: 8 },
+  overdueText: { color: palette.danger, fontSize: 12.5, fontFamily: fonts.bodySemibold, marginTop: 10 },
   overviewDivider: { height: 1, backgroundColor: palette.line, marginVertical: 16 },
   nearestLabel: { color: palette.muted, fontSize: 11, fontFamily: fonts.body, marginBottom: 4 },
   nearestText: { color: palette.accent, fontSize: 14, fontFamily: fonts.bodyBold },

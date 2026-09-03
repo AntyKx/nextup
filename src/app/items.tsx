@@ -7,6 +7,7 @@ import { AppIcon } from '@/components/app-icon';
 import { BottomNav } from '@/components/bottom-nav';
 import { EmptyState } from '@/components/empty-state';
 import { LifeItemCard } from '@/components/life-item-card';
+import { useCompleteWithUndo } from '@/components/use-complete-with-undo';
 import { categoryColors, fonts, palette } from '@/constants/design';
 import { useLifeItems } from '@/features/life-items/life-items-context';
 import { Category, categoryMeta } from '@/features/life-items/life-items-types';
@@ -15,7 +16,8 @@ import { sortByDueDate } from '@/features/life-items/life-items-utils';
 type Filter = 'all' | Category;
 
 export default function ItemsScreen() {
-  const { items, completeItem } = useLifeItems();
+  const { items } = useLifeItems();
+  const completeWithUndo = useCompleteWithUndo();
   const [filter, setFilter] = useState<Filter>('all');
   const visibleItems = useMemo(
     () => items.filter((item) => !item.completedAt && (filter === 'all' || item.category === filter)).sort(sortByDueDate),
@@ -63,7 +65,7 @@ export default function ItemsScreen() {
                 <LifeItemCard
                   key={item.id}
                   item={item}
-                  onComplete={completeItem}
+                  onComplete={completeWithUndo}
                   showDivider={index < visibleItems.length - 1}
                 />
               ))}

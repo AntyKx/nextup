@@ -1,13 +1,37 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppIcon, AppIconName } from '@/components/app-icon';
 import { BottomNav } from '@/components/bottom-nav';
 import { fonts, palette } from '@/constants/design';
+import { useLifeItems } from '@/features/life-items/life-items-context';
+import { getPermissionStatus, requestPermission } from '@/features/notifications/notification-service';
+
+const permissionCopy: Record<'granted' | 'denied' | 'undetermined', { label: string; description: string }> = {
+  granted: { label: '已允許', description: '到期提醒會準時通知你。' },
+  denied: { label: '未允許', description: '請到系統設定開啟這個 App 的通知權限，提醒才能送達。' },
+  undetermined: { label: '尚未詢問', description: '開啟「到期提醒」時會請你允許系統通知。' },
+};
 
 export default function SettingsScreen() {
-  const [notifications, setNotifications] = useState(true);
+  const { notificationsEnabled, setNotificationsEnabled } = useLifeItems();
+  const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+
+  useEffect(() => {
+    getPermissionStatus().then(setPermissionStatus);
+  }, []);
+
+  const toggleNotifications = async (value: boolean) => {
+    if (value) {
+      const granted = await requestPermission();
+      setPermissionStatus(await getPermissionStatus());
+      if (!granted) return;
+    }
+    await setNotificationsEnabled(value);
+  };
+
+  const permission = permissionCopy[permissionStatus];
 
   return (
     <View style={styles.page}>
@@ -22,14 +46,22 @@ export default function SettingsScreen() {
               <View style={styles.settingIcon}><AppIcon name="bell" size={19} color={palette.accentDeep} /></View>
               <View style={styles.settingCopy}>
                 <Text style={styles.settingTitle}>到期提醒</Text>
-                <Text style={styles.settingDescription}>系統通知套件接入後啟用</Text>
+                <Text style={styles.settingDescription}>關閉後會取消已排程的通知，但事項資料仍會保留</Text>
               </View>
               <Switch
-                value={notifications}
-                onValueChange={setNotifications}
+                value={notificationsEnabled}
+                onValueChange={toggleNotifications}
                 trackColor={{ false: '#DDD0BC', true: '#D2A184' }}
-                thumbColor={notifications ? palette.accentDeep : '#FBF5EA'}
+                thumbColor={notificationsEnabled ? palette.accentDeep : '#FBF5EA'}
               />
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.settingRow}>
+              <View style={styles.settingIcon}><AppIcon name="privacy" size={19} color={palette.accentDeep} /></View>
+              <View style={styles.settingCopy}>
+                <Text style={styles.settingTitle}>系統通知權限：{permission.label}</Text>
+                <Text style={styles.settingDescription}>{permission.description}</Text>
+              </View>
             </View>
           </View>
 
@@ -42,7 +74,7 @@ export default function SettingsScreen() {
 
           <Text style={styles.sectionTitle}>關於</Text>
           <View style={styles.panel}>
-            <SettingRow icon="calendar" title="下一件事 NextUp" description="Version 0.2.0 · Preview" />
+            <SettingRow icon="calendar" title="下一件事 NextUp" description="Version 0.3.0" />
           </View>
 
           <View style={styles.promiseCard}>

@@ -19,7 +19,11 @@ export type AppIconName =
   | 'cloud'
   | 'privacy'
   | 'chevron'
-  | 'filter';
+  | 'filter'
+  | 'back'
+  | 'edit'
+  | 'trash'
+  | 'undo';
 
 const iconNames: Record<AppIconName, SymbolViewProps['name']> = {
   today: { ios: 'sun.max', android: 'today', web: 'today' },
@@ -40,6 +44,10 @@ const iconNames: Record<AppIconName, SymbolViewProps['name']> = {
   privacy: { ios: 'hand.raised', android: 'shield', web: 'shield' },
   chevron: { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' },
   filter: { ios: 'line.3.horizontal.decrease', android: 'filter_list', web: 'filter_list' },
+  back: { ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' },
+  edit: { ios: 'pencil', android: 'edit', web: 'edit' },
+  trash: { ios: 'trash', android: 'delete', web: 'delete' },
+  undo: { ios: 'arrow.uturn.left', android: 'undo', web: 'undo' },
 };
 
 export function AppIcon({

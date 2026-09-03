@@ -1,16 +1,58 @@
-import { AppSnapshot } from '@/features/life-items/life-items-types';
+import { CompletionHistoryEntry, LifeItem } from '@/features/life-items/life-items-types';
 
-const STORAGE_KEY = 'nextup.snapshot.v1';
+/**
+ * Low-level localStorage blob access for the web repository. Web
+ * intentionally stays off SQLite (see plan) — one JSON blob is enough for
+ * a browser preview build.
+ */
 
-export async function loadSnapshot(): Promise<AppSnapshot | null> {
+const STORAGE_KEY = 'nextup.snapshot.v2';
+const LEGACY_STORAGE_KEY = 'nextup.snapshot.v1';
+
+export type WebBlob = {
+  version: 2;
+  items: LifeItem[];
+  completionHistory: CompletionHistoryEntry[];
+  settings: Record<string, unknown>;
+};
+
+export type LegacyWebBlob = {
+  version: 1;
+  items: {
+    id: string;
+    title: string;
+    category: string;
+    dueDate: string;
+    reminderDays: number;
+    recurrence: string;
+    note: string;
+    createdAt: string;
+    completedAt: string | null;
+    lastCompletedAt: string | null;
+  }[];
+};
+
+export function getStoredBlob(): WebBlob | null {
   try {
     const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as AppSnapshot) : null;
+    return raw ? (JSON.parse(raw) as WebBlob) : null;
   } catch {
     return null;
   }
 }
 
-export async function saveSnapshot(snapshot: AppSnapshot) {
-  globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+export function setStoredBlob(blob: WebBlob) {
+  globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(blob));
+}
+
+export function getLegacyBlob(): LegacyWebBlob | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(LEGACY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.items)) return null;
+    return parsed as LegacyWebBlob;
+  } catch {
+    return null;
+  }
 }

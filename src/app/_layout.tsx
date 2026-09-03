@@ -11,6 +11,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { SnackbarHost } from '@/components/snackbar';
 import { palette } from '@/constants/design';
 import { LifeItemsProvider } from '@/features/life-items/life-items-context';
 
@@ -48,7 +49,13 @@ export default function RootLayout() {
           name="add"
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
+        <Stack.Screen name="item/[id]" />
+        <Stack.Screen
+          name="item/[id]/edit"
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+        />
       </Stack>
+      <SnackbarHost />
     </LifeItemsProvider>
   );
 }

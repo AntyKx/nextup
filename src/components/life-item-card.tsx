@@ -1,3 +1,4 @@
+import { Href, router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/app-icon';
@@ -11,7 +12,7 @@ export function LifeItemCard({
   showDivider = true,
 }: {
   item: LifeItem;
-  onComplete: (id: string) => Promise<void>;
+  onComplete: (id: string) => void;
   showDivider?: boolean;
 }) {
   const days = daysUntil(item.dueDate);
@@ -19,26 +20,32 @@ export function LifeItemCard({
 
   return (
     <View style={[styles.row, showDivider && styles.divider]}>
-      <View style={[styles.iconBox, { backgroundColor: urgency.background }]}>
-        <AppIcon name={item.category} size={20} color={urgency.color} />
-      </View>
-      <View style={styles.copy}>
-        <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-        <View style={styles.metaRow}>
-          <View style={[styles.categoryDot, { backgroundColor: categoryColors[item.category].color }]} />
-          <Text style={styles.meta}>{categoryMeta[item.category].label} · {formatDisplayDate(item.dueDate)}</Text>
-          {item.recurrence !== 'none' ? (
-            <View style={styles.repeatRow}>
-              <AppIcon name="repeat" size={11} color={palette.muted} />
-              <Text style={styles.repeatText}>{recurrenceLabels[item.recurrence].replace('更新', '')}</Text>
-            </View>
-          ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`查看 ${item.title} 詳情`}
+        onPress={() => router.push(`/item/${item.id}` as Href)}
+        style={styles.tapZone}>
+        <View style={[styles.iconBox, { backgroundColor: urgency.background }]}>
+          <AppIcon name={item.category} size={20} color={urgency.color} />
         </View>
-      </View>
-      <View style={styles.countdown}>
-        <Text style={[styles.dayNumber, { color: urgency.color }]}>{days < 0 ? Math.abs(days) : days}</Text>
-        <Text style={styles.dayLabel}>{days < 0 ? '逾期' : days === 0 ? '今天' : '天'}</Text>
-      </View>
+        <View style={styles.copy}>
+          <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+          <View style={styles.metaRow}>
+            <View style={[styles.categoryDot, { backgroundColor: categoryColors[item.category].color }]} />
+            <Text style={styles.meta}>{categoryMeta[item.category].label} · {formatDisplayDate(item.dueDate)}</Text>
+            {item.recurrence !== 'none' ? (
+              <View style={styles.repeatRow}>
+                <AppIcon name="repeat" size={11} color={palette.muted} />
+                <Text style={styles.repeatText}>{recurrenceLabels[item.recurrence].replace('更新', '')}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+        <View style={styles.countdown}>
+          <Text style={[styles.dayNumber, { color: urgency.color }]}>{days < 0 ? Math.abs(days) : days}</Text>
+          <Text style={styles.dayLabel}>{days < 0 ? '逾期' : days === 0 ? '今天' : '天'}</Text>
+        </View>
+      </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`完成 ${item.title}`}
@@ -54,6 +61,7 @@ export function LifeItemCard({
 const styles = StyleSheet.create({
   row: { minHeight: 84, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' },
   divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.line },
+  tapZone: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   iconBox: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 13 },
   copy: { flex: 1, paddingRight: 10 },
   title: { color: palette.ink, fontSize: 15, fontFamily: fonts.bodyBold, letterSpacing: -0.15 },

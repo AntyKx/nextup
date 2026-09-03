@@ -1,72 +1,179 @@
-import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { createSeedSnapshot } from '@/features/life-items/life-items-seed';
-import { loadSnapshot, saveSnapshot } from '@/features/life-items/life-items-storage';
-import { AppSnapshot, LifeItem, NewLifeItem } from '@/features/life-items/life-items-types';
-import { advanceDueDate } from '@/features/life-items/life-items-utils';
+import * as lifeItemsService from '@/features/life-items/life-items-service';
+import { CompletionHistoryEntry, LifeItem, LifeItemReminder, NewLifeItemInput, UpdateLifeItemInput } from '@/features/life-items/life-items-types';
 
 type LifeItemsContextValue = {
   items: LifeItem[];
   isLoading: boolean;
-  addItem: (item: NewLifeItem) => Promise<void>;
-  completeItem: (id: string) => Promise<void>;
+  error: string | null;
+  notificationsEnabled: boolean;
+  addItem: (item: NewLifeItemInput) => Promise<void>;
+  updateItem: (id: string, patch: UpdateLifeItemInput) => Promise<void>;
+  deleteItem: (id: string) => Promise<void>;
+  completeItem: (id: string) => Promise<{ historyId: string } | null>;
+  undoCompleteItem: (historyId: string) => Promise<void>;
+  getCompletionHistory: (itemId: string, limit?: number) => Promise<CompletionHistoryEntry[]>;
+  updateReminderSchedule: (itemId: string, daysBefore: number[]) => Promise<LifeItemReminder[]>;
+  setNotificationsEnabled: (enabled: boolean) => Promise<void>;
 };
 
 const LifeItemsContext = createContext<LifeItemsContextValue | null>(null);
 
 export function LifeItemsProvider({ children }: PropsWithChildren) {
-  const [snapshot, setSnapshot] = useState<AppSnapshot>({ version: 1, items: [] });
+  const [items, setItems] = useState<LifeItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const snapshotRef = useRef(snapshot);
+  const [error, setError] = useState<string | null>(null);
+  const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
+
+  const refresh = useCallback(async () => {
+    const next = await lifeItemsService.listItems();
+    setItems(next);
+    return next;
+  }, []);
 
   useEffect(() => {
     let active = true;
-    loadSnapshot().then(async (stored) => {
-      if (!active) return;
-      const next = stored ?? createSeedSnapshot();
-      snapshotRef.current = next;
-      setSnapshot(next);
-      setIsLoading(false);
-      if (!stored) await saveSnapshot(next);
-    });
-    return () => { active = false; };
-  }, []);
-
-  const commit = useCallback(async (updater: (current: AppSnapshot) => AppSnapshot) => {
-    const nextSnapshot = updater(snapshotRef.current);
-    snapshotRef.current = nextSnapshot;
-    setSnapshot(nextSnapshot);
-    await saveSnapshot(nextSnapshot);
-  }, []);
-
-  const addItem = useCallback(async (item: NewLifeItem) => {
-    const now = new Date().toISOString();
-    const newItem: LifeItem = {
-      ...item,
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      createdAt: now,
-      completedAt: null,
-      lastCompletedAt: null,
+    (async () => {
+      try {
+        const initial = await lifeItemsService.init();
+        if (!active) return;
+        setItems(initial);
+        setNotificationsEnabledState(await lifeItemsService.getNotificationsEnabled());
+        setIsLoading(false);
+        await lifeItemsService.syncNotificationsOnce();
+      } catch (err) {
+        console.error('[life-items] failed to initialize', err);
+        if (active) {
+          setError('資料載入失敗，請重新開啟 App。');
+          setIsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      active = false;
     };
-    await commit((current) => ({ ...current, items: [...current.items, newItem] }));
-  }, [commit]);
+  }, []);
 
-  const completeItem = useCallback(async (id: string) => {
-    const now = new Date().toISOString();
-    await commit((current) => ({
-      ...current,
-      items: current.items.map((item) => {
-        if (item.id !== id) return item;
-        if (item.recurrence === 'none') return { ...item, completedAt: now, lastCompletedAt: now };
-        return { ...item, dueDate: advanceDueDate(item.dueDate, item.recurrence), lastCompletedAt: now };
-      }),
-    }));
-  }, [commit]);
+  const addItem = useCallback(
+    async (item: NewLifeItemInput) => {
+      try {
+        await lifeItemsService.addItem(item);
+        await refresh();
+      } catch (err) {
+        console.error('[life-items] addItem failed', err);
+        setError('新增失敗，請再試一次。');
+        throw err;
+      }
+    },
+    [refresh],
+  );
+
+  const updateItem = useCallback(
+    async (id: string, patch: UpdateLifeItemInput) => {
+      try {
+        await lifeItemsService.updateItem(id, patch);
+        await refresh();
+      } catch (err) {
+        console.error('[life-items] updateItem failed', err);
+        setError('儲存失敗，請再試一次。');
+        throw err;
+      }
+    },
+    [refresh],
+  );
+
+  const deleteItem = useCallback(
+    async (id: string) => {
+      try {
+        await lifeItemsService.deleteItem(id);
+        await refresh();
+      } catch (err) {
+        console.error('[life-items] deleteItem failed', err);
+        setError('刪除失敗，請再試一次。');
+        throw err;
+      }
+    },
+    [refresh],
+  );
+
+  const completeItem = useCallback(
+    async (id: string) => {
+      try {
+        const { historyId } = await lifeItemsService.completeItem(id);
+        await refresh();
+        return { historyId };
+      } catch (err) {
+        if (err instanceof lifeItemsService.AlreadyInFlightError) return null;
+        console.error('[life-items] completeItem failed', err);
+        setError('完成失敗，請再試一次。');
+        throw err;
+      }
+    },
+    [refresh],
+  );
+
+  const undoCompleteItem = useCallback(
+    async (historyId: string) => {
+      try {
+        await lifeItemsService.undoCompleteItem(historyId);
+        await refresh();
+      } catch (err) {
+        console.error('[life-items] undoCompleteItem failed', err);
+        setError('復原失敗，請再試一次。');
+        throw err;
+      }
+    },
+    [refresh],
+  );
+
+  const getCompletionHistory = useCallback((itemId: string, limit?: number) => lifeItemsService.getCompletionHistory(itemId, limit), []);
+
+  const updateReminderSchedule = useCallback(
+    async (itemId: string, daysBefore: number[]) => {
+      const reminders = await lifeItemsService.updateReminderSchedule(itemId, daysBefore);
+      await refresh();
+      return reminders;
+    },
+    [refresh],
+  );
+
+  const setNotificationsEnabled = useCallback(async (enabled: boolean) => {
+    await lifeItemsService.setNotificationsEnabled(enabled);
+    setNotificationsEnabledState(enabled);
+  }, []);
 
   const value = useMemo(
-    () => ({ items: snapshot.items, isLoading, addItem, completeItem }),
-    [addItem, completeItem, isLoading, snapshot.items],
+    () => ({
+      items,
+      isLoading,
+      error,
+      notificationsEnabled,
+      addItem,
+      updateItem,
+      deleteItem,
+      completeItem,
+      undoCompleteItem,
+      getCompletionHistory,
+      updateReminderSchedule,
+      setNotificationsEnabled,
+    }),
+    [
+      items,
+      isLoading,
+      error,
+      notificationsEnabled,
+      addItem,
+      updateItem,
+      deleteItem,
+      completeItem,
+      undoCompleteItem,
+      getCompletionHistory,
+      updateReminderSchedule,
+      setNotificationsEnabled,
+    ],
   );
+
   return <LifeItemsContext.Provider value={value}>{children}</LifeItemsContext.Provider>;
 }
 
