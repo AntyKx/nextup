@@ -18,6 +18,22 @@ export type PersistNotificationId = (reminderId: string, notificationId: string 
 
 const isWeb = Platform.OS === 'web';
 
+/**
+ * `persist` can now throw (a reminder deleted by a concurrent operation
+ * makes the repository throw instead of silently no-op-ing). For best-effort
+ * cleanup paths — clearing an ID for a reminder that's already gone is fine
+ * to skip — log and move on instead of letting it blow up the whole loop.
+ */
+async function safePersist(reminderId: string, notificationId: string | null, persist: PersistNotificationId): Promise<void> {
+  try {
+    await persist(reminderId, notificationId);
+  } catch (error) {
+    console.error(`[notifications] failed to persist notification id for reminder ${reminderId}`, error);
+  }
+}
+
+const safeClear = (reminderId: string, persist: PersistNotificationId) => safePersist(reminderId, null, persist);
+
 if (!isWeb) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -62,6 +78,11 @@ export async function scheduleItemNotifications(item: LifeItem, persist: Persist
     const triggerDate = reminderTriggerDate(item, reminder.daysBefore);
     if (triggerDate.getTime() <= now) {
       result.skippedPast += 1;
+      // A reschedule cancels the old OS notification before calling in
+      // here, but the DB's notification_id is only cleared when we
+      // successfully schedule a replacement. Skipping that leaves the DB
+      // pointing at an OS notification that no longer exists.
+      if (reminder.notificationId) await safeClear(reminder.id, persist);
       continue;
     }
     let notificationId: string | null = null;
@@ -116,7 +137,7 @@ export async function cancelItemNotificationsAndClear(item: LifeItem, persist: P
   await cancelItemNotifications(item);
   if (isWeb) return;
   for (const reminder of item.reminders) {
-    if (reminder.notificationId) await persist(reminder.id, null);
+    if (reminder.notificationId) await safeClear(reminder.id, persist);
   }
 }
 
@@ -131,7 +152,7 @@ export async function cancelAllTracked(items: LifeItem[], persist: PersistNotifi
   for (const item of items) {
     await cancelItemNotifications(item);
     for (const reminder of item.reminders) {
-      if (reminder.notificationId) await persist(reminder.id, null);
+      if (reminder.notificationId) await safeClear(reminder.id, persist);
     }
   }
 }
@@ -156,10 +177,13 @@ export async function syncNotifications(items: LifeItem[], persist: PersistNotif
     return;
   }
 
-  const liveIdByReminderId = new Map<string, string>();
+  const liveIdsByReminderId = new Map<string, string[]>();
   for (const request of scheduled) {
     const data = request.content.data as { reminderId?: string } | undefined;
-    if (data?.reminderId) liveIdByReminderId.set(data.reminderId, request.identifier);
+    if (!data?.reminderId) continue;
+    const list = liveIdsByReminderId.get(data.reminderId) ?? [];
+    list.push(request.identifier);
+    liveIdsByReminderId.set(data.reminderId, list);
   }
 
   const knownReminderIds = new Set<string>();
@@ -181,7 +205,7 @@ export async function syncNotifications(items: LifeItem[], persist: PersistNotif
 
   for (const item of items) {
     if (item.completedAt) continue;
-    const missingLiveNotification = item.reminders.some((reminder) => !liveIdByReminderId.has(reminder.id));
+    const missingLiveNotification = item.reminders.some((reminder) => !liveIdsByReminderId.has(reminder.id));
     if (missingLiveNotification) {
       const result = await rescheduleItemNotifications(item, persist);
       if (result.failed > 0) {
@@ -189,13 +213,31 @@ export async function syncNotifications(items: LifeItem[], persist: PersistNotif
       }
       continue;
     }
-    // Every reminder has a live OS notification, but the DB's recorded ID
-    // can still be stale (e.g. a previous persist failed after the OS call
-    // succeeded) — bring the DB back in sync with what's actually scheduled.
     for (const reminder of item.reminders) {
-      const liveId = liveIdByReminderId.get(reminder.id);
-      if (liveId && liveId !== reminder.notificationId) {
-        await persist(reminder.id, liveId);
+      const liveIds = liveIdsByReminderId.get(reminder.id);
+      if (!liveIds) continue;
+      if (liveIds.length > 1) {
+        // A past bug/race left more than one live OS notification for the
+        // same reminder. Keep whichever the DB already points at (if it's
+        // among them, so nothing changes unnecessarily), cancel the rest.
+        const keep = reminder.notificationId && liveIds.includes(reminder.notificationId) ? reminder.notificationId : liveIds[0];
+        for (const id of liveIds) {
+          if (id === keep) continue;
+          try {
+            await Notifications.cancelScheduledNotificationAsync(id);
+          } catch (error) {
+            console.error('[notifications] failed to cancel duplicate notification', error);
+          }
+        }
+        if (keep !== reminder.notificationId) await safePersist(reminder.id, keep, persist);
+        continue;
+      }
+      // Exactly one live OS notification, but the DB's recorded ID can
+      // still be stale (e.g. a previous persist failed after the OS call
+      // succeeded) — bring the DB back in sync with what's actually scheduled.
+      const liveId = liveIds[0];
+      if (liveId !== reminder.notificationId) {
+        await safePersist(reminder.id, liveId, persist);
       }
     }
   }

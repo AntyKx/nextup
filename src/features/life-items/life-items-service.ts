@@ -201,4 +201,12 @@ export async function syncNotificationsOnce(): Promise<void> {
   await notificationService.syncNotifications(items, persistNotificationId);
 }
 
+export async function getOnboardingCompleted(): Promise<boolean> {
+  return lifeItemsRepository.getSetting('onboarding_completed', false);
+}
+
+export async function setOnboardingCompleted(completed: boolean): Promise<void> {
+  await lifeItemsRepository.setSetting('onboarding_completed', completed);
+}
+
 export { AlreadyInFlightError };

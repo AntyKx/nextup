@@ -2,7 +2,19 @@
 
 一個 local-first 的生活週期管理 App，專門管理「該續、該換、該繳、該處理」的事情，而不是一般待辦清單。
 
-## 目前版本：0.3.2
+## 目前版本：0.4.0
+
+### 0.4.0 — Template 2.0 + Onboarding
+
+這一版不改底層架構，重點是讓第一次下載的人快速理解「這不是待辦清單」，並且能在 30 秒內建立第一批真正有用的事項：
+
+- **Life Template 領域模型**：`src/features/templates/` 新增 `LifeTemplate` 型別、18 個正式模板目錄（護照、駕照、汽車/機車保險與保養、濾芯、冷氣、淨水器、牙刷、保固、網域、免費試用、訂閱、信用卡年費、旅行證件、簽證），每個模板代表一種真實的生活週期（分類＋週期＋起算方式＋提醒天數），不是只填標題。像護照、保險、保固這類「App 猜不到真正到期日」的模板刻意不給日期建議，使用者仍要自己確認日期。
+- **Template Browser**（`/templates`）：依分類瀏覽全部模板，每筆顯示白話說明（例如「固定每年續保，不會因晚一天處理而往後漂移」），不顯示 `fixed_schedule` / `from_completion` 這種工程詞。
+- **新增頁**：常用情境改成 6 個精選模板（來自正式目錄），並可「查看全部生活情境」進 Template Browser；點模板只會預填表單欄位，仍要按「加入生活清單」才會真的寫入資料庫。
+- **Onboarding**：全新安裝只會看到一次，3 頁，不要求登入、不主動跳系統通知權限詢問（那個留給 Settings 或之後的情境式提示）。用 `app_settings` 的 `onboarding_completed` 判斷是否要導頁，不影響通知點擊深連結。
+- **首頁情境式 Empty State**：完全沒有事項時，改成「還沒有需要記住的下一件事」+「從生活情境新增／自己建立」兩個按鈕；有資料時維持原本「已逾期／30 天內」資訊，不會被 Template 干擾。
+- **週期起算方式白話化**：「固定週期」「完成後才起算」進一步改成「照原本日期往後算」「從這次完成後重新算」，各自附上一行使用情境（保險/證件/年費 vs 濾芯/耗材/保養）。
+- **Foundation Cleanup**：`setReminderNotificationId` 現在會檢查真的更新到資料（沒更新到就丟錯，讓既有的 rollback 機制生效）；reschedule 時提醒時間若已過期，會清掉 DB 裡對應的舊 notification_id；reconciliation 新增「同一提醒有重複系統通知」的去重邏輯；`package.json`／`package-lock.json`／`app.json`／Settings／README 版本號統一。
 
 ### 0.3.2 — Final Reliability Patch
 

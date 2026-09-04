@@ -74,6 +74,11 @@ export const recurrenceLabels: Record<Recurrence, string> = {
 };
 
 export const recurrenceModeLabels: Record<RecurrenceMode, string> = {
-  fixed_schedule: '固定週期（保險、證件這類）',
-  from_completion: '完成後才起算（耗材、保養這類）',
+  fixed_schedule: '照原本日期往後算',
+  from_completion: '從這次完成後重新算',
+};
+
+export const recurrenceModeDescriptions: Record<RecurrenceMode, string> = {
+  fixed_schedule: '適合保險、證件、年費',
+  from_completion: '適合濾芯、耗材、保養',
 };

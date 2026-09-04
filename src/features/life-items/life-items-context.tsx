@@ -9,6 +9,8 @@ type LifeItemsContextValue = {
   isLoading: boolean;
   error: string | null;
   notificationsEnabled: boolean;
+  /** null while still loading — callers should treat that the same as "not decided yet", not as false. */
+  onboardingCompleted: boolean | null;
   addItem: (item: NewLifeItemInput) => Promise<void>;
   updateItem: (id: string, patch: UpdateLifeItemInput) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
@@ -17,6 +19,7 @@ type LifeItemsContextValue = {
   getCompletionHistory: (itemId: string, limit?: number) => Promise<CompletionHistoryEntry[]>;
   updateReminderSchedule: (itemId: string, daysBefore: number[]) => Promise<LifeItemReminder[]>;
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
+  setOnboardingCompleted: (completed: boolean) => Promise<void>;
 };
 
 const LifeItemsContext = createContext<LifeItemsContextValue | null>(null);
@@ -26,6 +29,7 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notificationsEnabled, setNotificationsEnabledState] = useState(false);
+  const [onboardingCompleted, setOnboardingCompletedState] = useState<boolean | null>(null);
 
   const refresh = useCallback(async () => {
     const next = await lifeItemsService.listItems();
@@ -41,6 +45,7 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
         if (!active) return;
         setItems(initial);
         setNotificationsEnabledState(await lifeItemsService.getNotificationsEnabled());
+        setOnboardingCompletedState(await lifeItemsService.getOnboardingCompleted());
         setIsLoading(false);
         await lifeItemsService.syncNotificationsOnce();
       } catch (err) {
@@ -149,12 +154,18 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
     if (notificationWarning) showSnackbar({ message: notificationWarning });
   }, []);
 
+  const setOnboardingCompleted = useCallback(async (completed: boolean) => {
+    await lifeItemsService.setOnboardingCompleted(completed);
+    setOnboardingCompletedState(completed);
+  }, []);
+
   const value = useMemo(
     () => ({
       items,
       isLoading,
       error,
       notificationsEnabled,
+      onboardingCompleted,
       addItem,
       updateItem,
       deleteItem,
@@ -163,12 +174,14 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
       getCompletionHistory,
       updateReminderSchedule,
       setNotificationsEnabled,
+      setOnboardingCompleted,
     }),
     [
       items,
       isLoading,
       error,
       notificationsEnabled,
+      onboardingCompleted,
       addItem,
       updateItem,
       deleteItem,
@@ -177,6 +190,7 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
       getCompletionHistory,
       updateReminderSchedule,
       setNotificationsEnabled,
+      setOnboardingCompleted,
     ],
   );
 

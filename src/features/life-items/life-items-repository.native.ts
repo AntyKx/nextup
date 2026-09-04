@@ -376,7 +376,14 @@ export const lifeItemsRepository: LifeItemsRepository = {
 
   async setReminderNotificationId(reminderId, notificationId) {
     const db = await getDatabase();
-    await db.runAsync('UPDATE reminders SET notification_id = ? WHERE id = ?', notificationId, reminderId);
+    const result = await db.runAsync('UPDATE reminders SET notification_id = ? WHERE id = ?', notificationId, reminderId);
+    // SQLite doesn't throw on a no-op UPDATE, so a reminder deleted by a
+    // concurrent operation would otherwise look like a successful persist —
+    // letting the caller (notification-service's schedule/rollback logic)
+    // believe a ghost OS notification is safely tracked in the DB.
+    if (result.changes !== 1) {
+      throw new Error(`life-items-repository.native: reminder ${reminderId} no longer exists`);
+    }
   },
 
   async getSetting(key, fallback) {

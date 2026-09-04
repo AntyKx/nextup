@@ -240,7 +240,8 @@ export const lifeItemsRepository: LifeItemsRepository = {
         reminders: item.reminders.map((reminder) => (reminder.id === reminderId ? { ...reminder, notificationId } : reminder)),
       };
     });
-    if (changed) await commit({ ...current, items });
+    if (!changed) throw new Error(`life-items-repository.web: reminder ${reminderId} no longer exists`);
+    await commit({ ...current, items });
   },
 
   async getSetting(key, fallback) {

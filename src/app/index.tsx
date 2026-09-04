@@ -1,11 +1,10 @@
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useMemo } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/app-icon';
 import { BottomNav } from '@/components/bottom-nav';
-import { EmptyState } from '@/components/empty-state';
 import { LifeItemCard } from '@/components/life-item-card';
 import { useCompleteWithUndo } from '@/components/use-complete-with-undo';
 import { fonts, palette } from '@/constants/design';
@@ -21,7 +20,7 @@ function todayLabel() {
 }
 
 export default function HomeScreen() {
-  const { items, isLoading, error } = useLifeItems();
+  const { items, isLoading, error, onboardingCompleted } = useLifeItems();
   const completeWithUndo = useCompleteWithUndo();
   const activeItems = useMemo(() => items.filter((item) => !item.completedAt).sort(sortByDueDate), [items]);
   const overdueItems = activeItems.filter((item) => daysUntil(item.dueDate) < 0);
@@ -32,8 +31,12 @@ export default function HomeScreen() {
   const previewItems = activeItems.slice(0, 4);
   const nearest = activeItems[0];
 
-  if (isLoading) {
+  if (isLoading || onboardingCompleted === null) {
     return <View style={styles.loading}><ActivityIndicator color={palette.accent} /></View>;
+  }
+
+  if (!onboardingCompleted) {
+    return <Redirect href="/onboarding" />;
   }
 
   return (
@@ -103,7 +106,7 @@ export default function HomeScreen() {
                 />
               ))}
             </View>
-          ) : <EmptyState />}
+          ) : <HomeEmptyState />}
           <View style={styles.bottomSpacer} />
         </ScrollView>
       </SafeAreaView>
@@ -116,6 +119,35 @@ export default function HomeScreen() {
         <AppIcon name="add" size={25} color={palette.white} />
       </Pressable>
       <BottomNav active="today" />
+    </View>
+  );
+}
+
+/** Home's own empty state (richer than the generic `EmptyState`) — only shown when there are zero active items at all, guiding a first-time user toward a template instead of a blank list. */
+function HomeEmptyState() {
+  return (
+    <View style={styles.homeEmpty}>
+      <View style={styles.homeEmptyIcon}>
+        <AppIcon name="calendar" size={24} color={palette.accent} />
+      </View>
+      <Text style={styles.homeEmptyTitle}>還沒有需要記住的下一件事</Text>
+      <Text style={styles.homeEmptyMessage}>從護照、保險、濾芯或訂閱開始。</Text>
+      <View style={styles.homeEmptyActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="從生活情境新增"
+          onPress={() => router.push('/templates')}
+          style={styles.homeEmptyPrimary}>
+          <Text style={styles.homeEmptyPrimaryText}>從生活情境新增</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="自己建立"
+          onPress={() => router.push('/add')}
+          style={styles.homeEmptySecondary}>
+          <Text style={styles.homeEmptySecondaryText}>自己建立</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -171,6 +203,15 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   bottomSpacer: { height: 150 },
+  homeEmpty: { paddingVertical: 30, paddingHorizontal: 12, alignItems: 'center' },
+  homeEmptyIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: palette.accentSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  homeEmptyTitle: { color: palette.ink, fontSize: 16, fontFamily: fonts.bodyBold, textAlign: 'center' },
+  homeEmptyMessage: { color: palette.muted, fontSize: 12.5, fontFamily: fonts.body, marginTop: 6, textAlign: 'center' },
+  homeEmptyActions: { flexDirection: 'row', gap: 10, marginTop: 22, width: '100%' },
+  homeEmptyPrimary: { flex: 1, height: 48, borderRadius: 14, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
+  homeEmptyPrimaryText: { color: palette.white, fontSize: 13, fontFamily: fonts.bodyBold },
+  homeEmptySecondary: { flex: 1, height: 48, borderRadius: 14, backgroundColor: palette.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  homeEmptySecondaryText: { color: palette.accentDeep, fontSize: 13, fontFamily: fonts.bodyBold },
   fab: { position: 'absolute', right: 20, bottom: 88, width: 54, height: 54, borderRadius: 27, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center', shadowColor: '#7A4423', shadowOpacity: 0.32, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 5 },
   fabPressed: { transform: [{ scale: 0.95 }], opacity: 0.9 },
 });

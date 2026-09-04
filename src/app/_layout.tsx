@@ -46,7 +46,9 @@ export default function RootLayout() {
           animation: 'slide_from_right',
         }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
         <Stack.Screen name="items" />
+        <Stack.Screen name="templates" />
         <Stack.Screen name="settings" />
         <Stack.Screen
           name="add"

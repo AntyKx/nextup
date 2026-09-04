@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -11,15 +12,14 @@ import {
   NewLifeItemInput,
   Recurrence,
   RecurrenceMode,
+  recurrenceModeDescriptions,
   recurrenceModeLabels,
 } from '@/features/life-items/life-items-types';
+import { getFeaturedTemplates } from '@/features/templates/template-utils';
+import { LifeTemplate } from '@/features/templates/template-types';
 
-const templates: { label: string; category: Category; days: number }[] = [
-  { label: '濾芯更換', category: 'home', days: 60 },
-  { label: '保險續約', category: 'vehicle', days: 365 },
-  { label: '免費試用', category: 'money', days: 7 },
-  { label: '護照換發', category: 'document', days: 180 },
-];
+const featuredTemplates = getFeaturedTemplates();
+const defaultNotePlaceholder = '想記下的細節（選填）';
 
 const recurrenceOptions: { value: Recurrence; label: string }[] = [
   { value: 'none', label: '不重複' },
@@ -28,9 +28,9 @@ const recurrenceOptions: { value: Recurrence; label: string }[] = [
   { value: 'yearly', label: '每年' },
 ];
 
-const recurrenceModeOptions: { value: RecurrenceMode; label: string }[] = [
-  { value: 'fixed_schedule', label: recurrenceModeLabels.fixed_schedule },
-  { value: 'from_completion', label: recurrenceModeLabels.from_completion },
+const recurrenceModeOptions: { value: RecurrenceMode; label: string; description: string }[] = [
+  { value: 'fixed_schedule', label: recurrenceModeLabels.fixed_schedule, description: recurrenceModeDescriptions.fixed_schedule },
+  { value: 'from_completion', label: recurrenceModeLabels.from_completion, description: recurrenceModeDescriptions.from_completion },
 ];
 
 const presetReminderDays = [1, 3, 7, 14, 30];
@@ -39,11 +39,14 @@ export type LifeItemFormValue = NewLifeItemInput;
 
 export function LifeItemForm({
   initialValue,
+  notePlaceholder: notePlaceholderProp,
   onSubmit,
   submitLabel,
   isEditing = false,
 }: {
   initialValue?: LifeItemFormValue;
+  /** Shown as the note field's placeholder — typically a selected template's `notePlaceholder`. */
+  notePlaceholder?: string;
   onSubmit: (value: LifeItemFormValue) => Promise<void>;
   submitLabel: string;
   isEditing?: boolean;
@@ -57,15 +60,23 @@ export function LifeItemForm({
   const [recurrence, setRecurrence] = useState<Recurrence>(initialValue?.recurrence ?? 'none');
   const [recurrenceMode, setRecurrenceMode] = useState<RecurrenceMode>(initialValue?.recurrenceMode ?? 'fixed_schedule');
   const [note, setNote] = useState(initialValue?.note ?? '');
+  const [notePlaceholder, setNotePlaceholder] = useState(notePlaceholderProp ?? defaultNotePlaceholder);
   const [showMoreSettings, setShowMoreSettings] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const sortedReminderDays = useMemo(() => [...reminderDays].sort((a, b) => a - b), [reminderDays]);
 
-  const pickTemplate = (template: (typeof templates)[number]) => {
-    setTitle(template.label);
+  // A template represents a real recurrence shape, not just a title — so
+  // picking one prefills category/recurrence/reminders too. The user still
+  // confirms (and can change) every field, including the date, before Save.
+  const pickTemplate = (template: LifeTemplate) => {
+    setTitle(template.title);
     setCategory(template.category);
-    setDueDate(formatIsoDate(addDays(new Date(), template.days)));
+    setDueDate(formatIsoDate(addDays(new Date(), template.defaultOffsetDays ?? 30)));
+    setRecurrence(template.recurrence);
+    setRecurrenceMode(template.recurrenceMode);
+    setReminderDays(template.reminderDays);
+    setNotePlaceholder(template.notePlaceholder ?? defaultNotePlaceholder);
   };
 
   const setDateFromNow = (days: number) => setDueDate(formatIsoDate(addDays(new Date(), days)));
@@ -109,17 +120,30 @@ export function LifeItemForm({
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       {!isEditing ? (
         <>
-          <Text style={styles.sectionLabel}>快速範本</Text>
+          <Text style={styles.introTitle}>選一個生活情境，或自己建立</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.templates}>
-            {templates.map((template) => (
-              <Pressable key={template.label} style={styles.template} onPress={() => pickTemplate(template)}>
+            {featuredTemplates.map((template) => (
+              <Pressable
+                key={template.id}
+                accessibilityRole="button"
+                accessibilityLabel={`使用「${template.title}」範本`}
+                style={styles.template}
+                onPress={() => pickTemplate(template)}>
                 <View style={[styles.templateIconBox, { backgroundColor: categoryColors[template.category].tint }]}>
                   <AppIcon name={template.category} size={19} color={categoryColors[template.category].color} />
                 </View>
-                <Text style={styles.templateText}>{template.label}</Text>
+                <Text style={styles.templateText}>{template.title}</Text>
               </Pressable>
             ))}
           </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="查看全部生活情境"
+            onPress={() => router.push('/templates')}
+            style={styles.viewAllTemplatesRow}>
+            <Text style={styles.viewAllTemplatesText}>查看全部生活情境</Text>
+            <AppIcon name="chevron" size={12} color={palette.muted} />
+          </Pressable>
         </>
       ) : null}
 
@@ -132,7 +156,7 @@ export function LifeItemForm({
         style={styles.input}
       />
 
-      <Text style={styles.sectionLabel}>到期／處理日期</Text>
+      <Text style={styles.sectionLabel}>什麼時候要處理？</Text>
       <DateField dueDate={dueDate} onChange={setDueDate} />
       <View style={styles.quickDates}>
         <QuickDate label="7 天後" onPress={() => setDateFromNow(7)} />
@@ -228,8 +252,11 @@ export function LifeItemForm({
                   <Pressable
                     key={option.value}
                     onPress={() => setRecurrenceMode(option.value)}
-                    style={[styles.recurrenceRow, index > 0 && styles.recurrenceDivider]}>
-                    <Text style={styles.recurrenceText}>{option.label}</Text>
+                    style={[styles.recurrenceModeRow, index > 0 && styles.recurrenceDivider]}>
+                    <View style={styles.recurrenceModeCopy}>
+                      <Text style={styles.recurrenceText}>{option.label}</Text>
+                      <Text style={styles.recurrenceModeDescription}>{option.description}</Text>
+                    </View>
                     <View style={[styles.radio, recurrenceMode === option.value && styles.radioActive]}>
                       {recurrenceMode === option.value ? <View style={styles.radioDot} /> : null}
                     </View>
@@ -243,7 +270,7 @@ export function LifeItemForm({
           <TextInput
             value={note}
             onChangeText={setNote}
-            placeholder="想記下的細節（選填）"
+            placeholder={notePlaceholder}
             placeholderTextColor={palette.subtle}
             style={[styles.input, styles.noteInput]}
             multiline
@@ -269,7 +296,10 @@ function QuickDate({ label, onPress }: { label: string; onPress: () => void }) {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
   sectionLabel: { color: palette.ink, fontSize: 13, fontFamily: fonts.bodySemibold, marginTop: 21, marginBottom: 10 },
+  introTitle: { color: palette.ink, fontSize: 15, fontFamily: fonts.bodyBold, marginBottom: 10 },
   templates: { gap: 9 },
+  viewAllTemplatesRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 12, paddingVertical: 4 },
+  viewAllTemplatesText: { color: palette.muted, fontSize: 12, fontFamily: fonts.bodySemibold },
   template: { width: 108, minHeight: 86, backgroundColor: palette.surface, borderRadius: 16, borderWidth: 1, borderColor: palette.line, padding: 12, justifyContent: 'space-between' },
   templateIconBox: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   templateText: { color: palette.ink, fontSize: 12, fontFamily: fonts.bodySemibold },
@@ -294,6 +324,9 @@ const styles = StyleSheet.create({
   moreSettingsLabel: { color: palette.ink, fontSize: 13.5, fontFamily: fonts.bodySemibold },
   recurrencePanel: { backgroundColor: palette.surface, borderRadius: 16, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 16 },
   recurrenceRow: { minHeight: 52, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  recurrenceModeRow: { minHeight: 60, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  recurrenceModeCopy: { flex: 1, paddingRight: 12 },
+  recurrenceModeDescription: { color: palette.muted, fontSize: 11.5, fontFamily: fonts.body, marginTop: 3 },
   recurrenceDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.line },
   recurrenceText: { color: palette.ink, fontSize: 14, fontFamily: fonts.body },
   radio: { width: 21, height: 21, borderRadius: 11, borderWidth: 2, borderColor: '#D9C6A6', alignItems: 'center', justifyContent: 'center' },
