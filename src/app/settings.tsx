@@ -17,18 +17,28 @@ const permissionCopy: Record<'granted' | 'denied' | 'undetermined', { label: str
 export default function SettingsScreen() {
   const { notificationsEnabled, setNotificationsEnabled } = useLifeItems();
   const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+  const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
 
   useEffect(() => {
     getPermissionStatus().then(setPermissionStatus);
   }, []);
 
   const toggleNotifications = async (value: boolean) => {
-    if (value) {
-      const granted = await requestPermission();
-      setPermissionStatus(await getPermissionStatus());
-      if (!granted) return;
+    // Scheduling/cancelling every item is async and can overlap a rapid
+    // on/off/on tap sequence — disable the switch mid-flight instead of
+    // letting two toggles race each other.
+    if (isUpdatingNotifications) return;
+    setIsUpdatingNotifications(true);
+    try {
+      if (value) {
+        const granted = await requestPermission();
+        setPermissionStatus(await getPermissionStatus());
+        if (!granted) return;
+      }
+      await setNotificationsEnabled(value);
+    } finally {
+      setIsUpdatingNotifications(false);
     }
-    await setNotificationsEnabled(value);
   };
 
   const permission = permissionCopy[permissionStatus];
@@ -51,6 +61,7 @@ export default function SettingsScreen() {
               <Switch
                 value={notificationsEnabled}
                 onValueChange={toggleNotifications}
+                disabled={isUpdatingNotifications}
                 trackColor={{ false: '#DDD0BC', true: '#D2A184' }}
                 thumbColor={notificationsEnabled ? palette.accentDeep : '#FBF5EA'}
               />
@@ -74,7 +85,7 @@ export default function SettingsScreen() {
 
           <Text style={styles.sectionTitle}>關於</Text>
           <View style={styles.panel}>
-            <SettingRow icon="calendar" title="下一件事 NextUp" description="Version 0.3.1" />
+            <SettingRow icon="calendar" title="下一件事 NextUp" description="Version 0.3.2" />
           </View>
 
           <View style={styles.promiseCard}>

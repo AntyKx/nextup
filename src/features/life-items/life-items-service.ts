@@ -8,7 +8,7 @@ import {
   UpdateLifeItemInput,
 } from '@/features/life-items/life-items-types';
 import * as notificationService from '@/features/notifications/notification-service';
-import { emptyScheduleResult, ScheduleResult, shouldScheduleNotifications } from '@/features/notifications/notification-policy';
+import { emptyScheduleResult, mergeScheduleResults, ScheduleResult, shouldScheduleNotifications } from '@/features/notifications/notification-policy';
 
 const persistNotificationId = (reminderId: string, notificationId: string | null) =>
   lifeItemsRepository.setReminderNotificationId(reminderId, notificationId);
@@ -47,12 +47,25 @@ export async function listItems(): Promise<LifeItem[]> {
   return lifeItemsRepository.listItems();
 }
 
+export async function getItem(id: string): Promise<LifeItem | null> {
+  return lifeItemsRepository.getItem(id);
+}
+
 export async function addItem(input: NewLifeItemInput): Promise<{ item: LifeItem; notificationWarning?: string }> {
   const anchorDay = parseLocalDate(input.dueDate).getDate();
   const item = await lifeItemsRepository.createItem({ ...input, anchorDay });
   const result = await scheduleIfEnabled(item);
   const withNotificationIds = await lifeItemsRepository.getItem(item.id);
   return { item: withNotificationIds ?? item, notificationWarning: notificationService.describeScheduleWarning(result) };
+}
+
+async function restoreNotificationsAfterFailedWrite(existing: LifeItem | null, context: string): Promise<void> {
+  if (!existing) return;
+  try {
+    await scheduleIfEnabled(existing);
+  } catch (restoreError) {
+    console.error(`[life-items] failed to restore notifications after ${context} DB failure`, restoreError);
+  }
 }
 
 export async function updateItem(id: string, patch: UpdateLifeItemInput): Promise<{ item: LifeItem; notificationWarning?: string }> {
@@ -62,7 +75,16 @@ export async function updateItem(id: string, patch: UpdateLifeItemInput): Promis
   // notification the app can no longer reference.
   const existing = await lifeItemsRepository.getItem(id);
   if (existing) await notificationService.cancelItemNotifications(existing);
-  const updated = await lifeItemsRepository.updateItem(id, patch);
+  let updated: LifeItem;
+  try {
+    updated = await lifeItemsRepository.updateItem(id, patch);
+  } catch (error) {
+    // The DB write failed, so the item is unchanged — but we already
+    // cancelled its old notifications above. Reschedule them so a failed
+    // edit doesn't silently kill a reminder that was working fine before.
+    await restoreNotificationsAfterFailedWrite(existing, 'updateItem');
+    throw error;
+  }
   const result = await scheduleIfEnabled(updated);
   const withNotificationIds = await lifeItemsRepository.getItem(id);
   return { item: withNotificationIds ?? updated, notificationWarning: notificationService.describeScheduleWarning(result) };
@@ -108,7 +130,10 @@ export async function completeItem(id: string, note?: string): Promise<{ item: L
     if (next) {
       result = await rescheduleIfEnabled(updated);
     } else {
-      await notificationService.cancelItemNotifications(updated);
+      // One-time completion: the item and its reminder rows stay in the DB
+      // (for history/detail display), so clear their notification_id too —
+      // otherwise they'd keep pointing at an OS notification that's gone.
+      await notificationService.cancelItemNotificationsAndClear(updated, persistNotificationId);
       result = emptyScheduleResult();
     }
     return { item: updated, historyId: history.id, notificationWarning: notificationService.describeScheduleWarning(result) };
@@ -132,7 +157,13 @@ export async function updateReminderSchedule(itemId: string, daysBefore: number[
   // reminders (real notification IDs) before replaceReminders deletes them.
   const existing = await lifeItemsRepository.getItem(itemId);
   if (existing) await notificationService.cancelItemNotifications(existing);
-  const reminders = await lifeItemsRepository.replaceReminders(itemId, daysBefore);
+  let reminders: LifeItemReminder[];
+  try {
+    reminders = await lifeItemsRepository.replaceReminders(itemId, daysBefore);
+  } catch (error) {
+    await restoreNotificationsAfterFailedWrite(existing, 'updateReminderSchedule');
+    throw error;
+  }
   const item = await lifeItemsRepository.getItem(itemId);
   const result = item ? await scheduleIfEnabled(item) : emptyScheduleResult();
   return { reminders, notificationWarning: notificationService.describeScheduleWarning(result) };
@@ -144,18 +175,23 @@ export async function getNotificationsEnabled(): Promise<boolean> {
   return lifeItemsRepository.getSetting('notifications_enabled', false);
 }
 
-export async function setNotificationsEnabled(enabled: boolean): Promise<void> {
+export async function setNotificationsEnabled(enabled: boolean): Promise<{ notificationWarning?: string }> {
   await lifeItemsRepository.setSetting('notifications_enabled', enabled);
   const items = await lifeItemsRepository.listItems();
   if (enabled) {
+    const results: ScheduleResult[] = [];
     for (const item of items) {
       if (shouldScheduleNotifications(true, item.completedAt)) {
-        await notificationService.rescheduleItemNotifications(item, persistNotificationId);
+        results.push(await notificationService.rescheduleItemNotifications(item, persistNotificationId));
       }
     }
-  } else {
-    await notificationService.cancelAllTracked(items, persistNotificationId);
+    // The user's intent (turn notifications on) is still honored even if
+    // some items couldn't be scheduled — the switch stays ON, but they're
+    // told which reminders need attention.
+    return { notificationWarning: notificationService.describeEnableWarning(mergeScheduleResults(...results)) };
   }
+  await notificationService.cancelAllTracked(items, persistNotificationId);
+  return {};
 }
 
 export async function syncNotificationsOnce(): Promise<void> {

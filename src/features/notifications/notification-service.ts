@@ -6,7 +6,13 @@ import { LifeItem } from '@/features/life-items/life-items-types';
 import { DEFAULT_NOTIFICATION_HOUR, emptyScheduleResult, ScheduleResult } from '@/features/notifications/notification-policy';
 
 export type { ScheduleResult } from '@/features/notifications/notification-policy';
-export { DEFAULT_NOTIFICATION_HOUR, describeScheduleWarning, shouldScheduleNotifications } from '@/features/notifications/notification-policy';
+export {
+  DEFAULT_NOTIFICATION_HOUR,
+  describeEnableWarning,
+  describeScheduleWarning,
+  mergeScheduleResults,
+  shouldScheduleNotifications,
+} from '@/features/notifications/notification-policy';
 
 export type PersistNotificationId = (reminderId: string, notificationId: string | null) => Promise<void>;
 
@@ -58,8 +64,9 @@ export async function scheduleItemNotifications(item: LifeItem, persist: Persist
       result.skippedPast += 1;
       continue;
     }
+    let notificationId: string | null = null;
     try {
-      const notificationId = await Notifications.scheduleNotificationAsync({
+      notificationId = await Notifications.scheduleNotificationAsync({
         content: {
           title: item.title,
           body: reminderBody(reminder.daysBefore),
@@ -71,6 +78,16 @@ export async function scheduleItemNotifications(item: LifeItem, persist: Persist
       result.scheduled += 1;
     } catch (error) {
       console.error(`[notifications] failed to schedule reminder ${reminder.id} for item ${item.id}`, error);
+      // The OS call can succeed even when persisting its ID fails — without
+      // this rollback that leaves a live OS notification the DB has no
+      // record of and can never cancel.
+      if (notificationId) {
+        try {
+          await Notifications.cancelScheduledNotificationAsync(notificationId);
+        } catch (rollbackError) {
+          console.error(`[notifications] failed to roll back notification ${notificationId} after persist failure`, rollbackError);
+        }
+      }
       result.failed += 1;
     }
   }
@@ -86,6 +103,20 @@ export async function cancelItemNotifications(item: LifeItem): Promise<void> {
     } catch (error) {
       console.error(`[notifications] failed to cancel notification ${reminder.notificationId}`, error);
     }
+  }
+}
+
+/**
+ * Like `cancelItemNotifications`, but also nulls out `notification_id` in
+ * the DB. Use this where the reminder rows survive the cancellation (e.g. a
+ * completed one-time item) — otherwise the DB keeps pointing at an OS
+ * notification that no longer exists.
+ */
+export async function cancelItemNotificationsAndClear(item: LifeItem, persist: PersistNotificationId): Promise<void> {
+  await cancelItemNotifications(item);
+  if (isWeb) return;
+  for (const reminder of item.reminders) {
+    if (reminder.notificationId) await persist(reminder.id, null);
   }
 }
 
@@ -125,10 +156,10 @@ export async function syncNotifications(items: LifeItem[], persist: PersistNotif
     return;
   }
 
-  const liveReminderIds = new Set<string>();
+  const liveIdByReminderId = new Map<string, string>();
   for (const request of scheduled) {
     const data = request.content.data as { reminderId?: string } | undefined;
-    if (data?.reminderId) liveReminderIds.add(data.reminderId);
+    if (data?.reminderId) liveIdByReminderId.set(data.reminderId, request.identifier);
   }
 
   const knownReminderIds = new Set<string>();
@@ -150,7 +181,22 @@ export async function syncNotifications(items: LifeItem[], persist: PersistNotif
 
   for (const item of items) {
     if (item.completedAt) continue;
-    const missingLiveNotification = item.reminders.some((reminder) => !liveReminderIds.has(reminder.id));
-    if (missingLiveNotification) await rescheduleItemNotifications(item, persist);
+    const missingLiveNotification = item.reminders.some((reminder) => !liveIdByReminderId.has(reminder.id));
+    if (missingLiveNotification) {
+      const result = await rescheduleItemNotifications(item, persist);
+      if (result.failed > 0) {
+        console.error(`[notifications] reconciliation reschedule had ${result.failed} failure(s) for item ${item.id}`);
+      }
+      continue;
+    }
+    // Every reminder has a live OS notification, but the DB's recorded ID
+    // can still be stale (e.g. a previous persist failed after the OS call
+    // succeeded) — bring the DB back in sync with what's actually scheduled.
+    for (const reminder of item.reminders) {
+      const liveId = liveIdByReminderId.get(reminder.id);
+      if (liveId && liveId !== reminder.notificationId) {
+        await persist(reminder.id, liveId);
+      }
+    }
   }
 }

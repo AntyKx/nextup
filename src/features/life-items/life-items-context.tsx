@@ -144,8 +144,9 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
   );
 
   const setNotificationsEnabled = useCallback(async (enabled: boolean) => {
-    await lifeItemsService.setNotificationsEnabled(enabled);
+    const { notificationWarning } = await lifeItemsService.setNotificationsEnabled(enabled);
     setNotificationsEnabledState(enabled);
+    if (notificationWarning) showSnackbar({ message: notificationWarning });
   }, []);
 
   const value = useMemo(

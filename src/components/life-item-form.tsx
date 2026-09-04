@@ -180,6 +180,7 @@ export function LifeItemForm({
           </Pressable>
         )}
       </View>
+      <Text style={styles.reminderHint}>提醒會在當天上午 9:00 發送</Text>
 
       <Text style={styles.sectionLabel}>分類</Text>
       <View style={styles.categoryGrid}>
@@ -285,6 +286,7 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: palette.accent, borderColor: palette.accent },
   chipText: { color: palette.muted, fontSize: 12, fontFamily: fonts.bodySemibold },
   chipTextActive: { color: palette.white },
+  reminderHint: { color: palette.subtle, fontSize: 11, fontFamily: fonts.body, marginTop: 8 },
   customReminderRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   customReminderInput: { width: 64, height: 36, borderRadius: 12, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 10, color: palette.ink, fontSize: 12, fontFamily: fonts.bodySemibold },
   customReminderConfirm: { width: 36, height: 36, borderRadius: 12, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },

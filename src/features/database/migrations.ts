@@ -59,12 +59,23 @@ const migrations: Migration[] = [
     version: 2,
     description: 'completion_history: capture previous state so Undo can restore it exactly',
     up: async (db) => {
-      await db.execAsync(`
-        ALTER TABLE completion_history ADD COLUMN previous_due_date TEXT;
-        ALTER TABLE completion_history ADD COLUMN previous_anchor_day INTEGER;
-        ALTER TABLE completion_history ADD COLUMN previous_completed_at TEXT;
-        ALTER TABLE completion_history ADD COLUMN previous_last_completed_at TEXT;
-      `);
+      // Checked per-column (rather than one blind ALTER TABLE block) so a
+      // v0.3.1 install that crashed mid-migration — columns added but
+      // user_version never bumped — can still complete cleanly on retry
+      // instead of failing on "duplicate column name".
+      const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(completion_history);');
+      const existing = new Set(columns.map((c) => c.name));
+      const required: [string, string][] = [
+        ['previous_due_date', 'TEXT'],
+        ['previous_anchor_day', 'INTEGER'],
+        ['previous_completed_at', 'TEXT'],
+        ['previous_last_completed_at', 'TEXT'],
+      ];
+      for (const [name, type] of required) {
+        if (!existing.has(name)) {
+          await db.execAsync(`ALTER TABLE completion_history ADD COLUMN ${name} ${type};`);
+        }
+      }
     },
   },
 ];
@@ -75,10 +86,13 @@ export async function runMigrations(db: SQLiteDatabase): Promise<void> {
   let current = row?.user_version ?? 0;
   const pending = migrations.filter((m) => m.version > current).sort((a, b) => a.version - b.version);
   for (const migration of pending) {
+    // The schema change and the user_version bump must commit together —
+    // otherwise a crash between them leaves the DB one version ahead of
+    // what user_version claims, and the next launch re-runs work it already did.
     await db.withTransactionAsync(async () => {
       await migration.up(db);
+      await db.execAsync(`PRAGMA user_version = ${migration.version};`);
     });
-    await db.execAsync(`PRAGMA user_version = ${migration.version};`);
     current = migration.version;
   }
 }
