@@ -55,6 +55,18 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    description: 'completion_history: capture previous state so Undo can restore it exactly',
+    up: async (db) => {
+      await db.execAsync(`
+        ALTER TABLE completion_history ADD COLUMN previous_due_date TEXT;
+        ALTER TABLE completion_history ADD COLUMN previous_anchor_day INTEGER;
+        ALTER TABLE completion_history ADD COLUMN previous_completed_at TEXT;
+        ALTER TABLE completion_history ADD COLUMN previous_last_completed_at TEXT;
+      `);
+    },
+  },
 ];
 
 export async function runMigrations(db: SQLiteDatabase): Promise<void> {

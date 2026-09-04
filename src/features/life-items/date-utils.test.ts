@@ -2,7 +2,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { addPeriodClamped, calculateNextDueDate, daysUntil } from './date-utils';
+import { addPeriodClamped, calculateNextDueDate, daysUntil, resolveAnchorDayOnUpdate, resolveUndoState, timestampToLocalIsoDate } from './date-utils';
+
+// Node reads TZ lazily on every Date computation, so setting it here (before
+// any Date work in this file) makes the local-date tests below deterministic
+// regardless of the host machine's own timezone.
+process.env.TZ = 'Asia/Taipei';
 
 test('addPeriodClamped: Jan 31 monthly clamps through short months and recovers', () => {
   assert.equal(addPeriodClamped('2026-01-31', 'monthly', 31, 1), '2026-02-28');
@@ -63,4 +68,59 @@ test('daysUntil: overdue, today, and future dates', () => {
   assert.equal(daysUntil('2026-09-01', today), -4);
   assert.equal(daysUntil('2026-09-05', today), 0);
   assert.equal(daysUntil('2026-09-10', today), 5);
+});
+
+test('timestampToLocalIsoDate: converts using the local calendar day, not a UTC slice', () => {
+  // 2026-09-03T16:30:00Z is 2026-09-04 00:30 in Asia/Taipei (UTC+8) — a
+  // naive `.slice(0, 10)` on the timestamp would wrongly read 2026-09-03.
+  const timestamp = '2026-09-03T16:30:00.000Z';
+  assert.equal(timestampToLocalIsoDate(timestamp), '2026-09-04');
+  assert.notEqual(timestampToLocalIsoDate(timestamp), timestamp.slice(0, 10));
+});
+
+test('resolveAnchorDayOnUpdate: keeps the existing anchor day when dueDate is unchanged or omitted', () => {
+  assert.equal(resolveAnchorDayOnUpdate('2027-02-28', 31, '2027-02-28'), 31);
+  assert.equal(resolveAnchorDayOnUpdate('2027-02-28', 31, undefined), 31);
+});
+
+test('resolveAnchorDayOnUpdate: only recomputes when dueDate actually changes', () => {
+  assert.equal(resolveAnchorDayOnUpdate('2027-02-28', 31, '2027-02-15'), 15);
+});
+
+test('resolveUndoState: restores the exact previous state when a snapshot was captured', () => {
+  const state = resolveUndoState(
+    {
+      scheduledDate: '2027-02-28',
+      previousDueDate: '2027-02-28',
+      previousAnchorDay: 31,
+      previousCompletedAt: null,
+      previousLastCompletedAt: '2027-01-31T00:00:00.000Z',
+    },
+    null,
+  );
+  assert.deepEqual(state, {
+    dueDate: '2027-02-28',
+    anchorDay: 31,
+    completedAt: null,
+    lastCompletedAt: '2027-01-31T00:00:00.000Z',
+  });
+});
+
+test('resolveUndoState: falls back to recomputing anchor day for legacy history with no snapshot', () => {
+  const state = resolveUndoState(
+    {
+      scheduledDate: '2027-02-28',
+      previousDueDate: null,
+      previousAnchorDay: null,
+      previousCompletedAt: null,
+      previousLastCompletedAt: null,
+    },
+    '2027-01-15T00:00:00.000Z',
+  );
+  assert.deepEqual(state, {
+    dueDate: '2027-02-28',
+    anchorDay: 28,
+    completedAt: null,
+    lastCompletedAt: '2027-01-15T00:00:00.000Z',
+  });
 });

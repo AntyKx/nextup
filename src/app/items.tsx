@@ -14,15 +14,20 @@ import { Category, categoryMeta } from '@/features/life-items/life-items-types';
 import { sortByDueDate } from '@/features/life-items/life-items-utils';
 
 type Filter = 'all' | Category;
+type Status = 'active' | 'completed';
 
 export default function ItemsScreen() {
   const { items } = useLifeItems();
   const completeWithUndo = useCompleteWithUndo();
+  const [status, setStatus] = useState<Status>('active');
   const [filter, setFilter] = useState<Filter>('all');
-  const visibleItems = useMemo(
-    () => items.filter((item) => !item.completedAt && (filter === 'all' || item.category === filter)).sort(sortByDueDate),
-    [filter, items],
-  );
+  const completedCount = useMemo(() => items.filter((item) => item.completedAt).length, [items]);
+  const visibleItems = useMemo(() => {
+    if (status === 'completed') {
+      return items.filter((item) => item.completedAt).sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''));
+    }
+    return items.filter((item) => !item.completedAt && (filter === 'all' || item.category === filter)).sort(sortByDueDate);
+  }, [filter, items, status]);
 
   return (
     <View style={styles.page}>
@@ -41,21 +46,28 @@ export default function ItemsScreen() {
             </Pressable>
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-            <FilterChip label="全部" active={filter === 'all'} onPress={() => setFilter('all')} />
-            {(Object.keys(categoryMeta) as Category[]).map((category) => (
-              <FilterChip
-                key={category}
-                label={categoryMeta[category].label}
-                active={filter === category}
-                onPress={() => setFilter(category)}
-                accent={categoryColors[category]}
-              />
-            ))}
-          </ScrollView>
+          <View style={styles.statusRow}>
+            <FilterChip label="進行中" active={status === 'active'} onPress={() => setStatus('active')} />
+            <FilterChip label={`已完成${completedCount ? ` (${completedCount})` : ''}`} active={status === 'completed'} onPress={() => setStatus('completed')} />
+          </View>
+
+          {status === 'active' ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+              <FilterChip label="全部" active={filter === 'all'} onPress={() => setFilter('all')} />
+              {(Object.keys(categoryMeta) as Category[]).map((category) => (
+                <FilterChip
+                  key={category}
+                  label={categoryMeta[category].label}
+                  active={filter === category}
+                  onPress={() => setFilter(category)}
+                  accent={categoryColors[category]}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
 
           <View style={styles.countRow}>
-            <Text style={styles.count}>{visibleItems.length} 個進行中事項</Text>
+            <Text style={styles.count}>{visibleItems.length} 個{status === 'active' ? '進行中' : '已完成'}事項</Text>
             <AppIcon name="filter" size={15} color={palette.subtle} />
           </View>
 
@@ -65,12 +77,14 @@ export default function ItemsScreen() {
                 <LifeItemCard
                   key={item.id}
                   item={item}
-                  onComplete={completeWithUndo}
+                  onComplete={status === 'active' ? completeWithUndo : undefined}
                   showDivider={index < visibleItems.length - 1}
                 />
               ))}
             </View>
-          ) : <EmptyState message="這個分類目前沒有待處理事項" />}
+          ) : (
+            <EmptyState message={status === 'active' ? '這個分類目前沒有待處理事項' : '還沒有已完成的事項'} />
+          )}
           <View style={styles.bottomSpacer} />
         </ScrollView>
       </SafeAreaView>
@@ -110,7 +124,8 @@ const styles = StyleSheet.create({
   title: { color: palette.ink, fontSize: 32, fontFamily: fonts.display },
   addButton: { width: 44, height: 44, borderRadius: 16, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.55 },
-  filters: { gap: 8, paddingHorizontal: 20, paddingTop: 23, paddingBottom: 22 },
+  statusRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 22 },
+  filters: { gap: 8, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 22 },
   filterChip: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 16 },
   filterText: { color: palette.muted, fontSize: 12, fontFamily: fonts.bodySemibold },
   countRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 22, marginBottom: 10 },

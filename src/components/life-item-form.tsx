@@ -98,7 +98,7 @@ export function LifeItemForm({
         recurrence,
         recurrenceMode,
         note,
-        reminderDays: sortedReminderDays.length ? sortedReminderDays : [7],
+        reminderDays: sortedReminderDays,
       });
     } finally {
       setIsSubmitting(false);

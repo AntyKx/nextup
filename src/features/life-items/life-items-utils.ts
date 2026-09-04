@@ -2,7 +2,17 @@ import { palette } from '@/constants/design';
 import { daysUntil, parseLocalDate } from '@/features/life-items/date-utils';
 import { LifeItem } from '@/features/life-items/life-items-types';
 
-export { addDays, addPeriodClamped, calculateNextDueDate, daysUntil, formatIsoDate, parseLocalDate } from '@/features/life-items/date-utils';
+export {
+  addDays,
+  addPeriodClamped,
+  calculateNextDueDate,
+  daysUntil,
+  formatIsoDate,
+  parseLocalDate,
+  resolveAnchorDayOnUpdate,
+  resolveUndoState,
+  timestampToLocalIsoDate,
+} from '@/features/life-items/date-utils';
 
 export function formatDisplayDate(value: string) {
   const date = parseLocalDate(value);

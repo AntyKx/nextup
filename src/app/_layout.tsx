@@ -14,6 +14,7 @@ import { useEffect } from 'react';
 import { SnackbarHost } from '@/components/snackbar';
 import { palette } from '@/constants/design';
 import { LifeItemsProvider } from '@/features/life-items/life-items-context';
+import { useNotificationTapNavigation } from '@/features/notifications/use-notification-navigation';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -30,6 +31,8 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded]);
+
+  useNotificationTapNavigation(fontsLoaded);
 
   if (!fontsLoaded) return null;
 

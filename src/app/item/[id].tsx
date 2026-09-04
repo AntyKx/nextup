@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '@/components/app-icon';
 import { useCompleteWithUndo } from '@/components/use-complete-with-undo';
 import { categoryColors, fonts, palette } from '@/constants/design';
-import { daysUntil } from '@/features/life-items/date-utils';
+import { daysUntil, timestampToLocalIsoDate } from '@/features/life-items/date-utils';
 import { useLifeItems } from '@/features/life-items/life-items-context';
 import { categoryMeta, CompletionHistoryEntry, recurrenceLabels, recurrenceModeLabels } from '@/features/life-items/life-items-types';
 import { formatDisplayDate, formatDueStatus, urgencyMeta } from '@/features/life-items/life-items-utils';
@@ -74,9 +74,21 @@ export default function ItemDetailScreen() {
           </View>
 
           <View style={styles.panel}>
+            {item.completedAt ? (
+              <>
+                <Row label="狀態" value="已完成" valueColor={palette.safe} />
+                <Divider />
+                <Row label="完成日期" value={formatDisplayDate(timestampToLocalIsoDate(item.completedAt))} />
+                <Divider />
+              </>
+            ) : null}
             <Row label="到期日期" value={formatDisplayDate(item.dueDate)} />
-            <Divider />
-            <Row label="剩餘時間" value={formatDueStatus(days)} valueColor={urgency.color} />
+            {!item.completedAt ? (
+              <>
+                <Divider />
+                <Row label="剩餘時間" value={formatDueStatus(days)} valueColor={urgency.color} />
+              </>
+            ) : null}
             <Divider />
             <Row label="週期" value={recurrenceLabels[item.recurrence]} />
             {item.recurrence !== 'none' ? (
@@ -85,10 +97,10 @@ export default function ItemDetailScreen() {
                 <Row label="起算方式" value={recurrenceModeLabels[item.recurrenceMode]} />
               </>
             ) : null}
-            {item.lastCompletedAt ? (
+            {item.lastCompletedAt && !item.completedAt ? (
               <>
                 <Divider />
-                <Row label="最近完成" value={formatDisplayDate(item.lastCompletedAt.slice(0, 10))} />
+                <Row label="最近完成" value={formatDisplayDate(timestampToLocalIsoDate(item.lastCompletedAt))} />
               </>
             ) : null}
           </View>
@@ -121,7 +133,7 @@ export default function ItemDetailScreen() {
               history.map((entry, index) => (
                 <View key={entry.id}>
                   {index > 0 ? <Divider /> : null}
-                  <Row label={formatDisplayDate(entry.scheduledDate)} value={`${formatDisplayDate(entry.completedAt.slice(0, 10))} 完成`} />
+                  <Row label={formatDisplayDate(entry.scheduledDate)} value={`${formatDisplayDate(timestampToLocalIsoDate(entry.completedAt))} 完成`} />
                 </View>
               ))
             ) : (

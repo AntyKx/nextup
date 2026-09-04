@@ -1,6 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 
 import { getDatabase } from '@/features/database/database';
+import { resolveAnchorDayOnUpdate, resolveUndoState } from '@/features/life-items/date-utils';
 import { createId } from '@/features/life-items/id';
 import { LifeItemsRepository } from '@/features/life-items/life-items-repository-types';
 import { createSeedItems } from '@/features/life-items/life-items-seed';
@@ -23,7 +24,17 @@ type LifeItemRow = {
 };
 
 type ReminderRow = { id: string; item_id: string; days_before: number; notification_id: string | null };
-type HistoryRow = { id: string; item_id: string; scheduled_date: string; completed_at: string; note: string | null };
+type HistoryRow = {
+  id: string;
+  item_id: string;
+  scheduled_date: string;
+  completed_at: string;
+  note: string | null;
+  previous_due_date: string | null;
+  previous_anchor_day: number | null;
+  previous_completed_at: string | null;
+  previous_last_completed_at: string | null;
+};
 type SettingRow = { value: string };
 
 function mapReminderRow(row: ReminderRow): LifeItemReminder {
@@ -31,7 +42,17 @@ function mapReminderRow(row: ReminderRow): LifeItemReminder {
 }
 
 function mapHistoryRow(row: HistoryRow): CompletionHistoryEntry {
-  return { id: row.id, itemId: row.item_id, scheduledDate: row.scheduled_date, completedAt: row.completed_at, note: row.note };
+  return {
+    id: row.id,
+    itemId: row.item_id,
+    scheduledDate: row.scheduled_date,
+    completedAt: row.completed_at,
+    note: row.note,
+    previousDueDate: row.previous_due_date,
+    previousAnchorDay: row.previous_anchor_day,
+    previousCompletedAt: row.previous_completed_at,
+    previousLastCompletedAt: row.previous_last_completed_at,
+  };
 }
 
 async function mapItemRow(db: SQLiteDatabase, row: LifeItemRow): Promise<LifeItem> {
@@ -215,7 +236,7 @@ export const lifeItemsRepository: LifeItemsRepository = {
     const existing = await getItemById(db, id);
     if (!existing) throw new Error(`life-items-repository.native: item ${id} not found`);
     const dueDate = patch.dueDate ?? existing.dueDate;
-    const anchorDay = patch.dueDate ? Number(patch.dueDate.split('-')[2]) : existing.anchorDay;
+    const anchorDay = resolveAnchorDayOnUpdate(existing.dueDate, existing.anchorDay, patch.dueDate);
     await db.withTransactionAsync(async () => {
       await db.runAsync(
         `UPDATE life_items SET title=?, category=?, due_date=?, anchor_day=?, recurrence=?, recurrence_mode=?, note=?, updated_at=? WHERE id=?`,
@@ -249,12 +270,18 @@ export const lifeItemsRepository: LifeItemsRepository = {
     const historyId = createId('history');
     await db.withTransactionAsync(async () => {
       await db.runAsync(
-        'INSERT INTO completion_history (id, item_id, scheduled_date, completed_at, note) VALUES (?, ?, ?, ?, ?)',
+        `INSERT INTO completion_history
+          (id, item_id, scheduled_date, completed_at, note, previous_due_date, previous_anchor_day, previous_completed_at, previous_last_completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         historyId,
         itemId,
         args.scheduledDate,
         args.completedAt,
         args.note ?? null,
+        args.previousDueDate,
+        args.previousAnchorDay,
+        args.previousCompletedAt,
+        args.previousLastCompletedAt,
       );
       if (args.nextDueDate) {
         await db.runAsync(
@@ -277,7 +304,20 @@ export const lifeItemsRepository: LifeItemsRepository = {
     });
     const item = await getItemById(db, itemId);
     if (!item) throw new Error(`life-items-repository.native: item ${itemId} not found after completion`);
-    return { item, history: { id: historyId, itemId, scheduledDate: args.scheduledDate, completedAt: args.completedAt, note: args.note ?? null } };
+    return {
+      item,
+      history: {
+        id: historyId,
+        itemId,
+        scheduledDate: args.scheduledDate,
+        completedAt: args.completedAt,
+        note: args.note ?? null,
+        previousDueDate: args.previousDueDate,
+        previousAnchorDay: args.previousAnchorDay,
+        previousCompletedAt: args.previousCompletedAt,
+        previousLastCompletedAt: args.previousLastCompletedAt,
+      },
+    };
   },
 
   async undoCompletion(historyId) {
@@ -290,12 +330,22 @@ export const lifeItemsRepository: LifeItemsRepository = {
         'SELECT completed_at FROM completion_history WHERE item_id = ? ORDER BY completed_at DESC LIMIT 1',
         history.item_id,
       );
-      const anchorDay = Number(history.scheduled_date.split('-')[2]) || 1;
-      await db.runAsync(
-        'UPDATE life_items SET due_date=?, anchor_day=?, completed_at=NULL, last_completed_at=?, updated_at=? WHERE id=?',
-        history.scheduled_date,
-        anchorDay,
+      const state = resolveUndoState(
+        {
+          scheduledDate: history.scheduled_date,
+          previousDueDate: history.previous_due_date,
+          previousAnchorDay: history.previous_anchor_day,
+          previousCompletedAt: history.previous_completed_at,
+          previousLastCompletedAt: history.previous_last_completed_at,
+        },
         remaining?.completed_at ?? null,
+      );
+      await db.runAsync(
+        'UPDATE life_items SET due_date=?, anchor_day=?, completed_at=?, last_completed_at=?, updated_at=? WHERE id=?',
+        state.dueDate,
+        state.anchorDay,
+        state.completedAt,
+        state.lastCompletedAt,
         new Date().toISOString(),
         history.item_id,
       );

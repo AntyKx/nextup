@@ -33,6 +33,16 @@ export type CompletionHistoryEntry = {
   scheduledDate: string;
   completedAt: string;
   note: string | null;
+  /**
+   * Exact pre-completion snapshot, so Undo can *restore* instead of
+   * recompute. Null only for history rows written before v0.3.1, which
+   * predate this snapshot — those fall back to a best-effort recompute
+   * (see `resolveUndoState`).
+   */
+  previousDueDate: string | null;
+  previousAnchorDay: number | null;
+  previousCompletedAt: string | null;
+  previousLastCompletedAt: string | null;
 };
 
 export type NewLifeItemInput = {

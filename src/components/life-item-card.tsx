@@ -12,11 +12,12 @@ export function LifeItemCard({
   showDivider = true,
 }: {
   item: LifeItem;
-  onComplete: (id: string) => void;
+  onComplete?: (id: string) => void;
   showDivider?: boolean;
 }) {
+  const completed = Boolean(item.completedAt);
   const days = daysUntil(item.dueDate);
-  const urgency = urgencyMeta(days);
+  const urgency = completed ? { color: palette.safe, background: '#E4E9DA' } : urgencyMeta(days);
 
   return (
     <View style={[styles.row, showDivider && styles.divider]}>
@@ -41,19 +42,28 @@ export function LifeItemCard({
             ) : null}
           </View>
         </View>
-        <View style={styles.countdown}>
-          <Text style={[styles.dayNumber, { color: urgency.color }]}>{days < 0 ? Math.abs(days) : days}</Text>
-          <Text style={styles.dayLabel}>{days < 0 ? '逾期' : days === 0 ? '今天' : '天'}</Text>
-        </View>
+        {completed ? (
+          <View style={styles.doneBadge}>
+            <AppIcon name="check" size={12} color={palette.safe} />
+            <Text style={styles.doneBadgeText}>已完成</Text>
+          </View>
+        ) : (
+          <View style={styles.countdown}>
+            <Text style={[styles.dayNumber, { color: urgency.color }]}>{days < 0 ? Math.abs(days) : days}</Text>
+            <Text style={styles.dayLabel}>{days < 0 ? '逾期' : days === 0 ? '今天' : '天'}</Text>
+          </View>
+        )}
       </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`完成 ${item.title}`}
-        onPress={() => onComplete(item.id)}
-        hitSlop={8}
-        style={({ pressed }) => [styles.check, pressed && styles.checkPressed]}>
-        <AppIcon name="check" size={14} color={palette.accent} />
-      </Pressable>
+      {onComplete ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`完成 ${item.title}`}
+          onPress={() => onComplete(item.id)}
+          hitSlop={8}
+          style={({ pressed }) => [styles.check, pressed && styles.checkPressed]}>
+          <AppIcon name="check" size={14} color={palette.accent} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -71,6 +81,8 @@ const styles = StyleSheet.create({
   repeatRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   repeatText: { color: palette.muted, fontSize: 10.5, fontFamily: fonts.body },
   countdown: { width: 42, alignItems: 'flex-end', marginRight: 12 },
+  doneBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 4 },
+  doneBadgeText: { color: palette.safe, fontSize: 11, fontFamily: fonts.bodySemibold },
   dayNumber: { fontSize: 20, fontFamily: fonts.display, lineHeight: 22, letterSpacing: -0.2 },
   dayLabel: { color: palette.subtle, fontSize: 10, marginTop: 2, fontFamily: fonts.body },
   check: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: '#D9C6A6', alignItems: 'center', justifyContent: 'center' },

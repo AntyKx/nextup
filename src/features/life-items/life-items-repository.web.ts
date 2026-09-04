@@ -1,13 +1,14 @@
+import { resolveAnchorDayOnUpdate, resolveUndoState } from '@/features/life-items/date-utils';
 import { createId } from '@/features/life-items/id';
 import { LifeItemsRepository } from '@/features/life-items/life-items-repository-types';
 import { createSeedItems } from '@/features/life-items/life-items-seed';
-import { getLegacyBlob, getStoredBlob, setStoredBlob, WebBlob } from '@/features/life-items/life-items-storage.web';
+import { getLegacyBlob, getStoredBlob, getV2Blob, setStoredBlob, WebBlob } from '@/features/life-items/life-items-storage.web';
 import { CompletionHistoryEntry, LifeItem, UpdateLifeItemInput } from '@/features/life-items/life-items-types';
 
 let blob: WebBlob | null = null;
 
 function emptyBlob(): WebBlob {
-  return { version: 2, items: [], completionHistory: [], settings: {} };
+  return { version: 3, items: [], completionHistory: [], settings: {} };
 }
 
 function migrateLegacyBlob(): WebBlob {
@@ -28,7 +29,25 @@ function migrateLegacyBlob(): WebBlob {
     completedAt: old.completedAt,
     lastCompletedAt: old.lastCompletedAt,
   }));
-  return { version: 2, items, completionHistory: [], settings: {} };
+  return { version: 3, items, completionHistory: [], settings: {} };
+}
+
+/** v2 history rows predate the previous-state snapshot — backfill with nulls so `resolveUndoState` takes the legacy fallback path. */
+function upgradeV2Blob(): WebBlob | null {
+  const v2 = getV2Blob();
+  if (!v2) return null;
+  return {
+    version: 3,
+    items: v2.items,
+    completionHistory: v2.completionHistory.map((entry) => ({
+      ...entry,
+      previousDueDate: null,
+      previousAnchorDay: null,
+      previousCompletedAt: null,
+      previousLastCompletedAt: null,
+    })),
+    settings: v2.settings,
+  };
 }
 
 function requireBlob(): WebBlob {
@@ -53,6 +72,11 @@ export const lifeItemsRepository: LifeItemsRepository = {
     const stored = getStoredBlob();
     if (stored) {
       blob = stored;
+      return;
+    }
+    const upgraded = upgradeV2Blob();
+    if (upgraded) {
+      await commit(upgraded);
       return;
     }
     const migrated = migrateLegacyBlob();
@@ -99,7 +123,7 @@ export const lifeItemsRepository: LifeItemsRepository = {
       title: patch.title ?? existing.title,
       category: patch.category ?? existing.category,
       dueDate: patch.dueDate ?? existing.dueDate,
-      anchorDay: patch.dueDate ? Number(patch.dueDate.split('-')[2]) : existing.anchorDay,
+      anchorDay: resolveAnchorDayOnUpdate(existing.dueDate, existing.anchorDay, patch.dueDate),
       recurrence: patch.recurrence ?? existing.recurrence,
       recurrenceMode: patch.recurrenceMode ?? existing.recurrenceMode,
       note: patch.note ?? existing.note,
@@ -131,6 +155,10 @@ export const lifeItemsRepository: LifeItemsRepository = {
       scheduledDate: args.scheduledDate,
       completedAt: args.completedAt,
       note: args.note ?? null,
+      previousDueDate: args.previousDueDate,
+      previousAnchorDay: args.previousAnchorDay,
+      previousCompletedAt: args.previousCompletedAt,
+      previousLastCompletedAt: args.previousLastCompletedAt,
     };
     const updated: LifeItem = {
       ...existing,
@@ -158,12 +186,22 @@ export const lifeItemsRepository: LifeItemsRepository = {
     const remainingForItem = remainingHistory
       .filter((entry) => entry.itemId === history.itemId)
       .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+    const state = resolveUndoState(
+      {
+        scheduledDate: history.scheduledDate,
+        previousDueDate: history.previousDueDate,
+        previousAnchorDay: history.previousAnchorDay,
+        previousCompletedAt: history.previousCompletedAt,
+        previousLastCompletedAt: history.previousLastCompletedAt,
+      },
+      remainingForItem[0]?.completedAt ?? null,
+    );
     const restored: LifeItem = {
       ...existing,
-      dueDate: history.scheduledDate,
-      anchorDay: Number(history.scheduledDate.split('-')[2]),
-      completedAt: null,
-      lastCompletedAt: remainingForItem[0]?.completedAt ?? null,
+      dueDate: state.dueDate,
+      anchorDay: state.anchorDay,
+      completedAt: state.completedAt,
+      lastCompletedAt: state.lastCompletedAt,
       updatedAt: new Date().toISOString(),
     };
     await commit({

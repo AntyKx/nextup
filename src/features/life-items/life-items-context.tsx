@@ -1,5 +1,6 @@
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { showSnackbar } from '@/components/snackbar';
 import * as lifeItemsService from '@/features/life-items/life-items-service';
 import { CompletionHistoryEntry, LifeItem, LifeItemReminder, NewLifeItemInput, UpdateLifeItemInput } from '@/features/life-items/life-items-types';
 
@@ -11,7 +12,7 @@ type LifeItemsContextValue = {
   addItem: (item: NewLifeItemInput) => Promise<void>;
   updateItem: (id: string, patch: UpdateLifeItemInput) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
-  completeItem: (id: string) => Promise<{ historyId: string } | null>;
+  completeItem: (id: string) => Promise<{ historyId: string; notificationWarning?: string } | null>;
   undoCompleteItem: (historyId: string) => Promise<void>;
   getCompletionHistory: (itemId: string, limit?: number) => Promise<CompletionHistoryEntry[]>;
   updateReminderSchedule: (itemId: string, daysBefore: number[]) => Promise<LifeItemReminder[]>;
@@ -24,7 +25,7 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
   const [items, setItems] = useState<LifeItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabledState] = useState(false);
 
   const refresh = useCallback(async () => {
     const next = await lifeItemsService.listItems();
@@ -58,8 +59,9 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
   const addItem = useCallback(
     async (item: NewLifeItemInput) => {
       try {
-        await lifeItemsService.addItem(item);
+        const { notificationWarning } = await lifeItemsService.addItem(item);
         await refresh();
+        if (notificationWarning) showSnackbar({ message: notificationWarning });
       } catch (err) {
         console.error('[life-items] addItem failed', err);
         setError('新增失敗，請再試一次。');
@@ -72,8 +74,9 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
   const updateItem = useCallback(
     async (id: string, patch: UpdateLifeItemInput) => {
       try {
-        await lifeItemsService.updateItem(id, patch);
+        const { notificationWarning } = await lifeItemsService.updateItem(id, patch);
         await refresh();
+        if (notificationWarning) showSnackbar({ message: notificationWarning });
       } catch (err) {
         console.error('[life-items] updateItem failed', err);
         setError('儲存失敗，請再試一次。');
@@ -100,9 +103,9 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
   const completeItem = useCallback(
     async (id: string) => {
       try {
-        const { historyId } = await lifeItemsService.completeItem(id);
+        const { historyId, notificationWarning } = await lifeItemsService.completeItem(id);
         await refresh();
-        return { historyId };
+        return { historyId, notificationWarning };
       } catch (err) {
         if (err instanceof lifeItemsService.AlreadyInFlightError) return null;
         console.error('[life-items] completeItem failed', err);
@@ -116,8 +119,9 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
   const undoCompleteItem = useCallback(
     async (historyId: string) => {
       try {
-        await lifeItemsService.undoCompleteItem(historyId);
+        const { notificationWarning } = await lifeItemsService.undoCompleteItem(historyId);
         await refresh();
+        if (notificationWarning) showSnackbar({ message: `已復原。${notificationWarning}` });
       } catch (err) {
         console.error('[life-items] undoCompleteItem failed', err);
         setError('復原失敗，請再試一次。');
@@ -131,8 +135,9 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
 
   const updateReminderSchedule = useCallback(
     async (itemId: string, daysBefore: number[]) => {
-      const reminders = await lifeItemsService.updateReminderSchedule(itemId, daysBefore);
+      const { reminders, notificationWarning } = await lifeItemsService.updateReminderSchedule(itemId, daysBefore);
       await refresh();
+      if (notificationWarning) showSnackbar({ message: notificationWarning });
       return reminders;
     },
     [refresh],

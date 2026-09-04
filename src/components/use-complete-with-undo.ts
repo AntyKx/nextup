@@ -12,8 +12,9 @@ export function useCompleteWithUndo() {
       const item = items.find((candidate) => candidate.id === id);
       completeItem(id).then((result) => {
         if (!result) return;
+        const title = item?.title ?? '這個項目';
         showSnackbar({
-          message: `已完成 ${item?.title ?? '這個項目'}`,
+          message: result.notificationWarning ? `已完成 ${title}・${result.notificationWarning}` : `已完成 ${title}`,
           actionLabel: '復原',
           onAction: () => undoCompleteItem(result.historyId),
         });

@@ -8,6 +8,7 @@ import {
   UpdateLifeItemInput,
 } from '@/features/life-items/life-items-types';
 import * as notificationService from '@/features/notifications/notification-service';
+import { emptyScheduleResult, ScheduleResult, shouldScheduleNotifications } from '@/features/notifications/notification-policy';
 
 const persistNotificationId = (reminderId: string, notificationId: string | null) =>
   lifeItemsRepository.setReminderNotificationId(reminderId, notificationId);
@@ -20,6 +21,23 @@ class AlreadyInFlightError extends Error {
 
 const inFlightCompletions = new Set<string>();
 
+/** Every add/edit/complete/undo path funnels through here so the global switch is enforced in one place. */
+async function scheduleIfEnabled(item: LifeItem): Promise<ScheduleResult> {
+  const enabled = await getNotificationsEnabled();
+  if (!shouldScheduleNotifications(enabled, item.completedAt)) return emptyScheduleResult();
+  return notificationService.scheduleItemNotifications(item, persistNotificationId);
+}
+
+/** Like `scheduleIfEnabled`, but also guarantees no stray OS notification survives when the switch is off. */
+async function rescheduleIfEnabled(item: LifeItem): Promise<ScheduleResult> {
+  const enabled = await getNotificationsEnabled();
+  if (!shouldScheduleNotifications(enabled, item.completedAt)) {
+    await notificationService.cancelItemNotifications(item);
+    return emptyScheduleResult();
+  }
+  return notificationService.rescheduleItemNotifications(item, persistNotificationId);
+}
+
 export async function init(): Promise<LifeItem[]> {
   await lifeItemsRepository.init();
   return lifeItemsRepository.listItems();
@@ -29,19 +47,25 @@ export async function listItems(): Promise<LifeItem[]> {
   return lifeItemsRepository.listItems();
 }
 
-export async function addItem(input: NewLifeItemInput): Promise<LifeItem> {
+export async function addItem(input: NewLifeItemInput): Promise<{ item: LifeItem; notificationWarning?: string }> {
   const anchorDay = parseLocalDate(input.dueDate).getDate();
   const item = await lifeItemsRepository.createItem({ ...input, anchorDay });
-  await notificationService.scheduleItemNotifications(item, persistNotificationId);
+  const result = await scheduleIfEnabled(item);
   const withNotificationIds = await lifeItemsRepository.getItem(item.id);
-  return withNotificationIds ?? item;
+  return { item: withNotificationIds ?? item, notificationWarning: notificationService.describeScheduleWarning(result) };
 }
 
-export async function updateItem(id: string, patch: UpdateLifeItemInput): Promise<LifeItem> {
+export async function updateItem(id: string, patch: UpdateLifeItemInput): Promise<{ item: LifeItem; notificationWarning?: string }> {
+  // Cancel using the PRE-update reminders/notification IDs first — the
+  // repository replaces the reminders rows wholesale (fresh IDs, no
+  // notification_id), so anything we don't cancel here becomes a ghost
+  // notification the app can no longer reference.
+  const existing = await lifeItemsRepository.getItem(id);
+  if (existing) await notificationService.cancelItemNotifications(existing);
   const updated = await lifeItemsRepository.updateItem(id, patch);
-  if (!updated.completedAt) await notificationService.rescheduleItemNotifications(updated, persistNotificationId);
+  const result = await scheduleIfEnabled(updated);
   const withNotificationIds = await lifeItemsRepository.getItem(id);
-  return withNotificationIds ?? updated;
+  return { item: withNotificationIds ?? updated, notificationWarning: notificationService.describeScheduleWarning(result) };
 }
 
 export async function deleteItem(id: string): Promise<void> {
@@ -50,7 +74,7 @@ export async function deleteItem(id: string): Promise<void> {
   await lifeItemsRepository.deleteItem(id);
 }
 
-export async function completeItem(id: string, note?: string): Promise<{ item: LifeItem; historyId: string }> {
+export async function completeItem(id: string, note?: string): Promise<{ item: LifeItem; historyId: string; notificationWarning?: string }> {
   if (inFlightCompletions.has(id)) throw new AlreadyInFlightError(id);
   inFlightCompletions.add(id);
   try {
@@ -75,34 +99,49 @@ export async function completeItem(id: string, note?: string): Promise<{ item: L
       note,
       nextDueDate: next?.nextDueDate ?? null,
       nextAnchorDay: next?.nextAnchorDay ?? item.anchorDay,
+      previousDueDate: item.dueDate,
+      previousAnchorDay: item.anchorDay,
+      previousCompletedAt: item.completedAt,
+      previousLastCompletedAt: item.lastCompletedAt,
     });
-    if (next) await notificationService.rescheduleItemNotifications(updated, persistNotificationId);
-    else await notificationService.cancelItemNotifications(updated);
-    return { item: updated, historyId: history.id };
+    let result: ScheduleResult;
+    if (next) {
+      result = await rescheduleIfEnabled(updated);
+    } else {
+      await notificationService.cancelItemNotifications(updated);
+      result = emptyScheduleResult();
+    }
+    return { item: updated, historyId: history.id, notificationWarning: notificationService.describeScheduleWarning(result) };
   } finally {
     inFlightCompletions.delete(id);
   }
 }
 
-export async function undoCompleteItem(historyId: string): Promise<LifeItem> {
+export async function undoCompleteItem(historyId: string): Promise<{ item: LifeItem; notificationWarning?: string }> {
   const restored = await lifeItemsRepository.undoCompletion(historyId);
-  await notificationService.rescheduleItemNotifications(restored, persistNotificationId);
-  return restored;
+  const result = await rescheduleIfEnabled(restored);
+  return { item: restored, notificationWarning: notificationService.describeScheduleWarning(result) };
 }
 
 export async function getCompletionHistory(itemId: string, limit?: number): Promise<CompletionHistoryEntry[]> {
   return lifeItemsRepository.getCompletionHistory(itemId, limit);
 }
 
-export async function updateReminderSchedule(itemId: string, daysBefore: number[]): Promise<LifeItemReminder[]> {
+export async function updateReminderSchedule(itemId: string, daysBefore: number[]): Promise<{ reminders: LifeItemReminder[]; notificationWarning?: string }> {
+  // Same ghost-notification hazard as updateItem: cancel with the OLD
+  // reminders (real notification IDs) before replaceReminders deletes them.
+  const existing = await lifeItemsRepository.getItem(itemId);
+  if (existing) await notificationService.cancelItemNotifications(existing);
   const reminders = await lifeItemsRepository.replaceReminders(itemId, daysBefore);
   const item = await lifeItemsRepository.getItem(itemId);
-  if (item && !item.completedAt) await notificationService.rescheduleItemNotifications(item, persistNotificationId);
-  return reminders;
+  const result = item ? await scheduleIfEnabled(item) : emptyScheduleResult();
+  return { reminders, notificationWarning: notificationService.describeScheduleWarning(result) };
 }
 
 export async function getNotificationsEnabled(): Promise<boolean> {
-  return lifeItemsRepository.getSetting('notifications_enabled', true);
+  // Default OFF: a fresh install has never asked for (or been granted)
+  // notification permission, so the switch must not silently claim ON.
+  return lifeItemsRepository.getSetting('notifications_enabled', false);
 }
 
 export async function setNotificationsEnabled(enabled: boolean): Promise<void> {
@@ -110,7 +149,9 @@ export async function setNotificationsEnabled(enabled: boolean): Promise<void> {
   const items = await lifeItemsRepository.listItems();
   if (enabled) {
     for (const item of items) {
-      if (!item.completedAt) await notificationService.rescheduleItemNotifications(item, persistNotificationId);
+      if (shouldScheduleNotifications(true, item.completedAt)) {
+        await notificationService.rescheduleItemNotifications(item, persistNotificationId);
+      }
     }
   } else {
     await notificationService.cancelAllTracked(items, persistNotificationId);

@@ -3,6 +3,10 @@ import { Platform } from 'react-native';
 
 import { addDays, parseLocalDate } from '@/features/life-items/date-utils';
 import { LifeItem } from '@/features/life-items/life-items-types';
+import { DEFAULT_NOTIFICATION_HOUR, emptyScheduleResult, ScheduleResult } from '@/features/notifications/notification-policy';
+
+export type { ScheduleResult } from '@/features/notifications/notification-policy';
+export { DEFAULT_NOTIFICATION_HOUR, describeScheduleWarning, shouldScheduleNotifications } from '@/features/notifications/notification-policy';
 
 export type PersistNotificationId = (reminderId: string, notificationId: string | null) => Promise<void>;
 
@@ -35,7 +39,7 @@ export async function getPermissionStatus(): Promise<'granted' | 'denied' | 'und
 
 function reminderTriggerDate(item: LifeItem, daysBefore: number): Date {
   const trigger = addDays(parseLocalDate(item.dueDate), -daysBefore);
-  trigger.setHours(9, 0, 0, 0);
+  trigger.setHours(DEFAULT_NOTIFICATION_HOUR, 0, 0, 0);
   return trigger;
 }
 
@@ -44,12 +48,16 @@ function reminderBody(daysBefore: number): string {
   return `還有 ${daysBefore} 天到期`;
 }
 
-export async function scheduleItemNotifications(item: LifeItem, persist: PersistNotificationId): Promise<void> {
-  if (isWeb || item.completedAt) return;
+export async function scheduleItemNotifications(item: LifeItem, persist: PersistNotificationId): Promise<ScheduleResult> {
+  const result = emptyScheduleResult();
+  if (isWeb || item.completedAt) return result;
   const now = Date.now();
   for (const reminder of item.reminders) {
     const triggerDate = reminderTriggerDate(item, reminder.daysBefore);
-    if (triggerDate.getTime() <= now) continue;
+    if (triggerDate.getTime() <= now) {
+      result.skippedPast += 1;
+      continue;
+    }
     try {
       const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
@@ -60,10 +68,13 @@ export async function scheduleItemNotifications(item: LifeItem, persist: Persist
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: triggerDate },
       });
       await persist(reminder.id, notificationId);
+      result.scheduled += 1;
     } catch (error) {
       console.error(`[notifications] failed to schedule reminder ${reminder.id} for item ${item.id}`, error);
+      result.failed += 1;
     }
   }
+  return result;
 }
 
 export async function cancelItemNotifications(item: LifeItem): Promise<void> {
@@ -78,10 +89,10 @@ export async function cancelItemNotifications(item: LifeItem): Promise<void> {
   }
 }
 
-export async function rescheduleItemNotifications(item: LifeItem, persist: PersistNotificationId): Promise<void> {
-  if (isWeb) return;
+export async function rescheduleItemNotifications(item: LifeItem, persist: PersistNotificationId): Promise<ScheduleResult> {
+  if (isWeb) return emptyScheduleResult();
   await cancelItemNotifications(item);
-  await scheduleItemNotifications(item, persist);
+  return scheduleItemNotifications(item, persist);
 }
 
 export async function cancelAllTracked(items: LifeItem[], persist: PersistNotificationId): Promise<void> {

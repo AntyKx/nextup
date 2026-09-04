@@ -12,6 +12,11 @@ export type ApplyCompletionArgs = {
   nextDueDate: string | null;
   nextAnchorDay: number;
   note?: string;
+  /** Pre-completion snapshot, persisted verbatim so Undo can restore it exactly. */
+  previousDueDate: string;
+  previousAnchorDay: number;
+  previousCompletedAt: string | null;
+  previousLastCompletedAt: string | null;
 };
 
 /**
