@@ -1,4 +1,4 @@
-import { Href, router } from 'expo-router';
+import { Href, router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +14,18 @@ type Filter = 'all' | Category;
 export default function TemplatesScreen() {
   const [filter, setFilter] = useState<Filter>('all');
   const templates = useMemo(() => getTemplatesByCategory(filter), [filter]);
+  // Arriving from an in-progress Add screen (which already `replace`d
+  // itself with this one) means picking a template should replace this
+  // screen with the new Add instance too — never push, or the two Add
+  // visits would stack into two modals.
+  const { source } = useLocalSearchParams<{ source?: string }>();
+  const fromAdd = source === 'add';
+
+  const selectTemplate = (id: string) => {
+    const href = `/add?template=${id}` as Href;
+    if (fromAdd) router.replace(href);
+    else router.push(href);
+  };
 
   return (
     <View style={styles.page}>
@@ -45,7 +57,7 @@ export default function TemplatesScreen() {
             {templates.map((template, index) => (
               <View key={template.id}>
                 {index > 0 ? <View style={styles.divider} /> : null}
-                <TemplateRow template={template} />
+                <TemplateRow template={template} onPress={() => selectTemplate(template.id)} />
               </View>
             ))}
           </View>
@@ -56,13 +68,13 @@ export default function TemplatesScreen() {
   );
 }
 
-function TemplateRow({ template }: { template: LifeTemplate }) {
+function TemplateRow({ template, onPress }: { template: LifeTemplate; onPress: () => void }) {
   const accent = categoryColors[template.category];
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`使用「${template.title}」範本`}
-      onPress={() => router.push(`/add?template=${template.id}` as Href)}
+      onPress={onPress}
       style={styles.templateRow}>
       <View style={[styles.templateIconBox, { backgroundColor: accent.tint }]}>
         <AppIcon name={template.category} size={20} color={accent.color} />

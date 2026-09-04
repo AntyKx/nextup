@@ -2,7 +2,18 @@
 
 一個 local-first 的生活週期管理 App，專門管理「該續、該換、該繳、該處理」的事情，而不是一般待辦清單。
 
-## 目前版本：0.4.0
+## 目前版本：0.4.1
+
+### 0.4.1 — First-Run & Template Flow Fix
+
+0.4.0 定義的首次使用流程（全新安裝 → Onboarding → 首頁空狀態 → 生活情境 → 選 Template → 確認日期 → Save → 回首頁）寫出來了，但有幾個地方讓它沒有真正成立，這版修完：
+
+- **正式環境不再自動塞範例事項**：`seedIfEmpty()` 不再被 `init()` 呼叫，Web 版空 localStorage 也不會自動填 4 筆範例資料。全新安裝現在真的是 `items = []`，首頁空狀態才會真的出現。既有使用者的資料不受影響，不會被清除。`createSeedItems()` 保留在 `life-items-seed.ts`，需要時仍可手動用於開發/預覽。
+- **猜不到真實日期的 Template 不再 fallback +30 天**：護照、駕照、汽車/機車保險、手機/家電保固、信用卡年費、簽證這類模板，選擇後日期欄位會是**未選擇**狀態（顯示「請選擇實際日期」+ 低調提示「請依證件、保單或保固文件上的實際日期填寫」），直接按 Save 會被擋下並提示「還差一個日期」。只有手動 `/add`（沒有透過 Template）或本來就有 `defaultOffsetDays` 的 Template（濾芯、冷氣、免費試用、訂閱等）才會有日期建議。
+- **Template Save 完成後回首頁，不是回 Template Browser**：不管是從首頁或從新增頁進 Template Browser，選完模板存檔後都會 `dismissTo('/')` 回到首頁，立即看到剛建立的項目。
+- **新增頁 ↔ Template Browser 導覽整理**：從新增頁點「查看全部生活情境」再選模板，不會疊出第二個新增畫面——新增頁會先把自己換成 Template Browser（`replace`），選完模板再換回新增頁，全程只有一個新增畫面。
+- **舊使用者升級不會被強制看 Onboarding**：新增 `resolveInitialOnboardingState` 判斷邏輯——`onboarding_completed` 這個設定值從沒寫過時，會檢查資料庫是否已經有事項、完成紀錄或舊版遷移痕跡；有的話視為既有使用者直接跳過，只有真正全新安裝才會顯示 Onboarding。
+- **Reschedule 不再留下假的 notification ID**：取消舊通知後立刻把資料庫的 notification_id 清空，再嘗試排新的——即使新排程失敗或被跳過，資料庫也不會繼續指向一個已經被取消的系統通知。
 
 ### 0.4.0 — Template 2.0 + Onboarding
 

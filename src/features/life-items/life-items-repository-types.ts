@@ -38,4 +38,6 @@ export interface LifeItemsRepository {
   setReminderNotificationId(reminderId: string, notificationId: string | null): Promise<void>;
   getSetting<T>(key: string, fallback: T): Promise<T>;
   setSetting(key: string, value: unknown): Promise<void>;
+  /** True if this install had data (items, history, or a migration trace) before onboarding_completed was ever written — used to spare an upgrading user the onboarding flow. */
+  hasPreExistingData(): Promise<boolean>;
 }

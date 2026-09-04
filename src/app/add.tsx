@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { LifeItemForm, LifeItemFormValue } from '@/components/life-item-form';
+import { LifeItemForm, LifeItemFormInitialValue, LifeItemFormValue } from '@/components/life-item-form';
 import { fonts, palette } from '@/constants/design';
 import { addDays, formatIsoDate } from '@/features/life-items/date-utils';
 import { useLifeItems } from '@/features/life-items/life-items-context';
@@ -15,13 +15,15 @@ export default function AddScreen() {
   const template = templateId ? getTemplateById(templateId) : undefined;
 
   // A template only prefills the form — Save still requires the user to
-  // confirm every field, the real due date most of all (see LifeTemplate).
-  const initialValue: LifeItemFormValue | undefined = useMemo(() => {
+  // confirm every field. Without a defaultOffsetDays (passport, insurance,
+  // warranty, ...) the app genuinely can't guess the real date, so dueDate
+  // stays null and the form forces the user to pick one before Save.
+  const initialValue: LifeItemFormInitialValue | undefined = useMemo(() => {
     if (!template) return undefined;
     return {
       title: template.title,
       category: template.category,
-      dueDate: formatIsoDate(addDays(new Date(), template.defaultOffsetDays ?? 30)),
+      dueDate: template.defaultOffsetDays !== undefined ? formatIsoDate(addDays(new Date(), template.defaultOffsetDays)) : null,
       recurrence: template.recurrence,
       recurrenceMode: template.recurrenceMode,
       note: '',
@@ -31,7 +33,10 @@ export default function AddScreen() {
 
   const handleSubmit = async (value: LifeItemFormValue) => {
     await addItem(value);
-    router.back();
+    // Whatever path got here (Home → Add, or Home → Templates → Add), a
+    // successful save always lands back on Home so the new item is
+    // immediately visible — not wherever `back()` happens to point.
+    router.dismissTo('/');
   };
 
   return (

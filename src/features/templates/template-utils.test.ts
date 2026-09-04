@@ -54,3 +54,25 @@ test('validateTemplateCatalog: catches an invalid category/recurrence/recurrence
 test('validateTemplateCatalog: a fully valid template produces no errors', () => {
   assert.deepEqual(validateTemplateCatalog([base]), []);
 });
+
+// P1-5/P1-7: templates whose real due date the app has no way to guess must
+// never carry a defaultOffsetDays — that would silently fall back to a
+// fabricated date (e.g. "today + 30") for something like a passport expiry.
+const templatesRequiringExplicitDate = [
+  'passport-renewal',
+  'drivers-license-renewal',
+  'car-insurance-renewal',
+  'scooter-insurance-renewal',
+  'phone-warranty',
+  'appliance-warranty',
+  'credit-card-annual-fee',
+  'visa-expiration',
+];
+
+test('templateCatalog: templates with no guessable real date have no defaultOffsetDays', () => {
+  for (const id of templatesRequiringExplicitDate) {
+    const template = templateCatalog.find((candidate) => candidate.id === id);
+    assert.ok(template, `expected a template with id ${id}`);
+    assert.equal(template?.defaultOffsetDays, undefined, `${id} should not guess a due date`);
+  }
+});

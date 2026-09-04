@@ -1,7 +1,6 @@
 import { resolveAnchorDayOnUpdate, resolveUndoState } from '@/features/life-items/date-utils';
 import { createId } from '@/features/life-items/id';
 import { LifeItemsRepository } from '@/features/life-items/life-items-repository-types';
-import { createSeedItems } from '@/features/life-items/life-items-seed';
 import { getLegacyBlob, getStoredBlob, getV2Blob, setStoredBlob, WebBlob } from '@/features/life-items/life-items-storage.web';
 import { CompletionHistoryEntry, LifeItem, UpdateLifeItemInput } from '@/features/life-items/life-items-types';
 
@@ -79,8 +78,9 @@ export const lifeItemsRepository: LifeItemsRepository = {
       await commit(upgraded);
       return;
     }
+    // No sample-data fallback — a genuinely fresh install starts empty so
+    // the home screen's empty state shows (createSeedItems() stays available for manual dev/preview use).
     const migrated = migrateLegacyBlob();
-    if (migrated.items.length === 0) migrated.items = createSeedItems();
     await commit(migrated);
   },
 
@@ -252,5 +252,12 @@ export const lifeItemsRepository: LifeItemsRepository = {
   async setSetting(key, value) {
     const current = requireBlob();
     await commit({ ...current, settings: { ...current.settings, [key]: value } });
+  },
+
+  async hasPreExistingData() {
+    const current = requireBlob();
+    if (current.items.length > 0 || current.completionHistory.length > 0) return true;
+    // A legacy v1/v2 snapshot existing at all means this install has history, even if it happens to be empty right now.
+    return getLegacyBlob() !== null || getV2Blob() !== null;
   },
 };

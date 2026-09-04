@@ -36,6 +36,8 @@ const recurrenceModeOptions: { value: RecurrenceMode; label: string; description
 const presetReminderDays = [1, 3, 7, 14, 30];
 
 export type LifeItemFormValue = NewLifeItemInput;
+/** Prefill shape for the Add flow: a template with no guessable date passes `dueDate: null` to force the user to pick a real one — never a silent +30-day fallback. */
+export type LifeItemFormInitialValue = Omit<NewLifeItemInput, 'dueDate'> & { dueDate?: string | null };
 
 export function LifeItemForm({
   initialValue,
@@ -44,7 +46,7 @@ export function LifeItemForm({
   submitLabel,
   isEditing = false,
 }: {
-  initialValue?: LifeItemFormValue;
+  initialValue?: LifeItemFormInitialValue;
   /** Shown as the note field's placeholder — typically a selected template's `notePlaceholder`. */
   notePlaceholder?: string;
   onSubmit: (value: LifeItemFormValue) => Promise<void>;
@@ -53,7 +55,13 @@ export function LifeItemForm({
 }) {
   const [title, setTitle] = useState(initialValue?.title ?? '');
   const [category, setCategory] = useState<Category>(initialValue?.category ?? 'home');
-  const [dueDate, setDueDate] = useState(initialValue?.dueDate ?? formatIsoDate(addDays(new Date(), 30)));
+  // Editing (or a template with a defaultOffsetDays) always supplies a real
+  // date. A template with none explicitly passes `dueDate: null` — plain
+  // manual add (no initialValue at all) is the only case that gets the
+  // +30-day convenience default.
+  const [dueDate, setDueDate] = useState<string | null>(() =>
+    initialValue ? (initialValue.dueDate ?? null) : formatIsoDate(addDays(new Date(), 30)),
+  );
   const [reminderDays, setReminderDays] = useState<number[]>(initialValue?.reminderDays ?? [7]);
   const [customReminderInput, setCustomReminderInput] = useState('');
   const [showCustomReminderInput, setShowCustomReminderInput] = useState(false);
@@ -72,7 +80,10 @@ export function LifeItemForm({
   const pickTemplate = (template: LifeTemplate) => {
     setTitle(template.title);
     setCategory(template.category);
-    setDueDate(formatIsoDate(addDays(new Date(), template.defaultOffsetDays ?? 30)));
+    // No defaultOffsetDays means the app genuinely can't guess this date
+    // (passport, insurance, warranty, ...) — force the user to pick one
+    // instead of silently defaulting to +30 days.
+    setDueDate(template.defaultOffsetDays !== undefined ? formatIsoDate(addDays(new Date(), template.defaultOffsetDays)) : null);
     setRecurrence(template.recurrence);
     setRecurrenceMode(template.recurrenceMode);
     setReminderDays(template.reminderDays);
@@ -100,12 +111,17 @@ export function LifeItemForm({
       Alert.alert('還少一個名稱', '請輸入要提醒的事項。');
       return;
     }
+    const confirmedDueDate = dueDate;
+    if (confirmedDueDate === null) {
+      Alert.alert('還差一個日期', '請選擇實際到期或處理日期。');
+      return;
+    }
     setIsSubmitting(true);
     try {
       await onSubmit({
         title: title.trim(),
         category,
-        dueDate,
+        dueDate: confirmedDueDate,
         recurrence,
         recurrenceMode,
         note,
@@ -139,7 +155,10 @@ export function LifeItemForm({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="查看全部生活情境"
-            onPress={() => router.push('/templates')}
+            // replace (not push): this Add screen's in-progress form is
+            // superseded by whichever template gets picked next — pushing
+            // would stack a second Add screen on top once one comes back.
+            onPress={() => router.replace('/templates?source=add')}
             style={styles.viewAllTemplatesRow}>
             <Text style={styles.viewAllTemplatesText}>查看全部生活情境</Text>
             <AppIcon name="chevron" size={12} color={palette.muted} />
@@ -158,6 +177,7 @@ export function LifeItemForm({
 
       <Text style={styles.sectionLabel}>什麼時候要處理？</Text>
       <DateField dueDate={dueDate} onChange={setDueDate} />
+      {dueDate === null ? <Text style={styles.explicitDateHint}>請依證件、保單或保固文件上的實際日期填寫</Text> : null}
       <View style={styles.quickDates}>
         <QuickDate label="7 天後" onPress={() => setDateFromNow(7)} />
         <QuickDate label="30 天後" onPress={() => setDateFromNow(30)} />
@@ -308,6 +328,7 @@ const styles = StyleSheet.create({
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   category: { width: '31.7%', backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, borderRadius: 14, alignItems: 'center', paddingVertical: 12, gap: 6 },
   categoryText: { color: palette.muted, fontSize: 11.5, fontFamily: fonts.bodySemibold },
+  explicitDateHint: { color: palette.subtle, fontSize: 11, fontFamily: fonts.body, marginTop: 8 },
   quickDates: { flexDirection: 'row', gap: 7, marginTop: 8 },
   quickDate: { flex: 1, height: 34, backgroundColor: palette.surfaceMuted, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   quickDateText: { color: palette.muted, fontSize: 10, fontFamily: fonts.bodySemibold },

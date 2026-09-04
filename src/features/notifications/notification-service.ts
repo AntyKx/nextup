@@ -144,7 +144,18 @@ export async function cancelItemNotificationsAndClear(item: LifeItem, persist: P
 export async function rescheduleItemNotifications(item: LifeItem, persist: PersistNotificationId): Promise<ScheduleResult> {
   if (isWeb) return emptyScheduleResult();
   await cancelItemNotifications(item);
-  return scheduleItemNotifications(item, persist);
+  // Clear right after cancelling, before attempting to schedule replacements
+  // — if the new schedule then fails or skips a reminder (past trigger
+  // time), the DB must not keep pointing at the OS notification we just
+  // cancelled. Scheduling then proceeds from a clean slate for every reminder.
+  for (const reminder of item.reminders) {
+    if (reminder.notificationId) await safeClear(reminder.id, persist);
+  }
+  const clearedItem: LifeItem = {
+    ...item,
+    reminders: item.reminders.map((reminder) => ({ ...reminder, notificationId: null })),
+  };
+  return scheduleItemNotifications(clearedItem, persist);
 }
 
 export async function cancelAllTracked(items: LifeItem[], persist: PersistNotificationId): Promise<void> {

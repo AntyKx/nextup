@@ -64,49 +64,53 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          <View style={styles.overview}>
-            <View style={styles.overviewTop}>
-              <View style={styles.overviewIcon}>
-                <AppIcon name="calendar" size={23} color={palette.accentDeep} />
+          {activeItems.length > 0 ? (
+            <>
+              <View style={styles.overview}>
+                <View style={styles.overviewTop}>
+                  <View style={styles.overviewIcon}>
+                    <AppIcon name="calendar" size={23} color={palette.accentDeep} />
+                  </View>
+                  <Text style={styles.overviewLabel}>接下來 30 天</Text>
+                  <Pressable onPress={() => router.push('/items')} hitSlop={10}>
+                    <AppIcon name="chevron" size={16} color={palette.muted} />
+                  </Pressable>
+                </View>
+                <View style={styles.overviewMain}>
+                  <Text style={styles.overviewNumber}>{upcomingItems.length}</Text>
+                  <Text style={styles.overviewUnit}>件待處理事項</Text>
+                </View>
+                {overdueItems.length > 0 ? (
+                  <Text style={styles.overdueText}>已逾期 {overdueItems.length} 項，優先處理一下吧</Text>
+                ) : null}
+                <View style={styles.overviewDivider} />
+                <Text style={styles.nearestLabel}>最近一項</Text>
+                <Text style={styles.nearestText} numberOfLines={1}>
+                  {nearest ? `${nearest.title} · ${formatDueStatus(daysUntil(nearest.dueDate))}` : '目前沒有待處理事項'}
+                </Text>
               </View>
-              <Text style={styles.overviewLabel}>接下來 30 天</Text>
-              <Pressable onPress={() => router.push('/items')} hitSlop={10}>
-                <AppIcon name="chevron" size={16} color={palette.muted} />
-              </Pressable>
-            </View>
-            <View style={styles.overviewMain}>
-              <Text style={styles.overviewNumber}>{upcomingItems.length}</Text>
-              <Text style={styles.overviewUnit}>件待處理事項</Text>
-            </View>
-            {overdueItems.length > 0 ? (
-              <Text style={styles.overdueText}>已逾期 {overdueItems.length} 項，優先處理一下吧</Text>
-            ) : null}
-            <View style={styles.overviewDivider} />
-            <Text style={styles.nearestLabel}>最近一項</Text>
-            <Text style={styles.nearestText} numberOfLines={1}>
-              {nearest ? `${nearest.title} · ${formatDueStatus(daysUntil(nearest.dueDate))}` : '目前沒有待處理事項'}
-            </Text>
-          </View>
 
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>接下來</Text>
-            <Pressable onPress={() => router.push('/items')} hitSlop={10}>
-              <Text style={styles.seeAll}>查看全部</Text>
-            </Pressable>
-          </View>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>接下來</Text>
+                <Pressable onPress={() => router.push('/items')} hitSlop={10}>
+                  <Text style={styles.seeAll}>查看全部</Text>
+                </Pressable>
+              </View>
 
-          {previewItems.length ? (
-            <View style={styles.listPanel}>
-              {previewItems.map((item, index) => (
-                <LifeItemCard
-                  key={item.id}
-                  item={item}
-                  onComplete={completeWithUndo}
-                  showDivider={index < previewItems.length - 1}
-                />
-              ))}
-            </View>
-          ) : <HomeEmptyState />}
+              <View style={styles.listPanel}>
+                {previewItems.map((item, index) => (
+                  <LifeItemCard
+                    key={item.id}
+                    item={item}
+                    onComplete={completeWithUndo}
+                    showDivider={index < previewItems.length - 1}
+                  />
+                ))}
+              </View>
+            </>
+          ) : (
+            <HomeEmptyState />
+          )}
           <View style={styles.bottomSpacer} />
         </ScrollView>
       </SafeAreaView>

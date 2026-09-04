@@ -4,7 +4,6 @@ import { getDatabase } from '@/features/database/database';
 import { resolveAnchorDayOnUpdate, resolveUndoState } from '@/features/life-items/date-utils';
 import { createId } from '@/features/life-items/id';
 import { LifeItemsRepository } from '@/features/life-items/life-items-repository-types';
-import { createSeedItems } from '@/features/life-items/life-items-seed';
 import { readLegacySnapshot, renameLegacySnapshotAfterMigration } from '@/features/life-items/life-items-storage.native';
 import { CompletionHistoryEntry, LifeItem, LifeItemReminder, UpdateLifeItemInput } from '@/features/life-items/life-items-types';
 
@@ -167,22 +166,6 @@ async function migrateLegacyDataIfNeeded(db: SQLiteDatabase): Promise<void> {
   }
 }
 
-async function seedIfEmpty(db: SQLiteDatabase): Promise<void> {
-  const alreadySeeded = await getSettingValue(db, 'items_seeded', false);
-  if (alreadySeeded) return;
-  const countRow = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM life_items');
-  if ((countRow?.count ?? 0) > 0) {
-    await setSettingValue(db, 'items_seeded', true);
-    return;
-  }
-  await db.withTransactionAsync(async () => {
-    for (const item of createSeedItems()) {
-      await insertItemWithReminders(db, item);
-    }
-  });
-  await setSettingValue(db, 'items_seeded', true);
-}
-
 let initialized = false;
 
 export const lifeItemsRepository: LifeItemsRepository = {
@@ -190,7 +173,10 @@ export const lifeItemsRepository: LifeItemsRepository = {
     if (initialized) return;
     const db = await getDatabase();
     await migrateLegacyDataIfNeeded(db);
-    await seedIfEmpty(db);
+    // No seedIfEmpty() — production installs start with zero items so the
+    // home screen's empty state (and the v0.4 first-run flow through it)
+    // actually shows. createSeedItems() stays available in
+    // life-items-seed.ts for manual dev/preview use, just not auto-run.
     initialized = true;
   },
 
@@ -394,5 +380,17 @@ export const lifeItemsRepository: LifeItemsRepository = {
   async setSetting(key, value) {
     const db = await getDatabase();
     await setSettingValue(db, key, value);
+  },
+
+  async hasPreExistingData() {
+    const db = await getDatabase();
+    const items = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM life_items');
+    if ((items?.count ?? 0) > 0) return true;
+    const history = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM completion_history');
+    if ((history?.count ?? 0) > 0) return true;
+    const legacyStatus = await getSettingValue<string | null>(db, 'legacy_migration_status', null);
+    if (legacyStatus !== null) return true;
+    const itemsSeeded = await getSettingValue<boolean | null>(db, 'items_seeded', null);
+    return itemsSeeded !== null;
   },
 };

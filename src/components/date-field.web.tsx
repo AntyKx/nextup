@@ -3,12 +3,12 @@ import { StyleSheet, View } from 'react-native';
 
 import { palette } from '@/constants/design';
 
-export function DateField({ dueDate, onChange }: { dueDate: string; onChange: (iso: string) => void }) {
+export function DateField({ dueDate, onChange }: { dueDate: string | null; onChange: (iso: string) => void }) {
   return (
     <View style={styles.dateRow}>
       {createElement('input', {
         type: 'date',
-        value: dueDate,
+        value: dueDate ?? '',
         onChange: (event: { target: { value: string } }) => {
           if (event.target.value) onChange(event.target.value);
         },

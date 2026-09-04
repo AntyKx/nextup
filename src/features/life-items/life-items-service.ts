@@ -1,4 +1,5 @@
 import { calculateNextDueDate, formatIsoDate, parseLocalDate } from '@/features/life-items/date-utils';
+import { resolveInitialOnboardingState } from '@/features/life-items/onboarding-policy';
 import { lifeItemsRepository } from '@/features/life-items/life-items-repository';
 import {
   CompletionHistoryEntry,
@@ -202,7 +203,15 @@ export async function syncNotificationsOnce(): Promise<void> {
 }
 
 export async function getOnboardingCompleted(): Promise<boolean> {
-  return lifeItemsRepository.getSetting('onboarding_completed', false);
+  const stored = await lifeItemsRepository.getSetting<boolean | null>('onboarding_completed', null);
+  if (stored !== null) return stored;
+  // Never written before — an install that already had data (upgrading
+  // from an older version) must not be forced through onboarding as if it
+  // were brand new. Persist the inference so this only runs once.
+  const hasExistingData = await lifeItemsRepository.hasPreExistingData();
+  const resolved = resolveInitialOnboardingState({ hasExistingData, storedValue: null });
+  await lifeItemsRepository.setSetting('onboarding_completed', resolved);
+  return resolved;
 }
 
 export async function setOnboardingCompleted(completed: boolean): Promise<void> {
