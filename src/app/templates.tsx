@@ -27,11 +27,20 @@ export default function TemplatesScreen() {
     else router.push(href);
   };
 
+  // Arriving via `replace` from Add means this screen has no Add instance
+  // left underneath it — a plain back() would skip past Add entirely (to
+  // whatever was open before it, e.g. Home). Replacing back to a blank Add
+  // keeps "cancel out of browsing templates" landing on Add either way.
+  const goBack = () => {
+    if (fromAdd) router.replace('/add');
+    else router.back();
+  };
+
   return (
     <View style={styles.page}>
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerButton}>
+          <Pressable onPress={goBack} hitSlop={12} style={styles.headerButton}>
             <AppIcon name="back" size={20} color={palette.ink} />
           </Pressable>
           <Text style={styles.headerTitle}>生活情境</Text>

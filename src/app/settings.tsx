@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { AppState, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppIcon, AppIconName } from '@/components/app-icon';
@@ -21,6 +21,13 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     getPermissionStatus().then(setPermissionStatus);
+    // The user can grant/revoke notification permission from system Settings
+    // without ever closing the app — re-check whenever we come back to the
+    // foreground instead of only once on mount, or this row goes stale.
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') getPermissionStatus().then(setPermissionStatus);
+    });
+    return () => subscription.remove();
   }, []);
 
   const toggleNotifications = async (value: boolean) => {

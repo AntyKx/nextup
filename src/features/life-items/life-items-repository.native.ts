@@ -54,8 +54,7 @@ function mapHistoryRow(row: HistoryRow): CompletionHistoryEntry {
   };
 }
 
-async function mapItemRow(db: SQLiteDatabase, row: LifeItemRow): Promise<LifeItem> {
-  const reminderRows = await db.getAllAsync<ReminderRow>('SELECT * FROM reminders WHERE item_id = ? ORDER BY days_before DESC', row.id);
+function buildLifeItem(row: LifeItemRow, reminders: LifeItemReminder[]): LifeItem {
   return {
     id: row.id,
     title: row.title,
@@ -65,7 +64,7 @@ async function mapItemRow(db: SQLiteDatabase, row: LifeItemRow): Promise<LifeIte
     recurrence: row.recurrence as LifeItem['recurrence'],
     recurrenceMode: row.recurrence_mode as LifeItem['recurrenceMode'],
     note: row.note,
-    reminders: reminderRows.map(mapReminderRow),
+    reminders,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     completedAt: row.completed_at,
@@ -73,9 +72,35 @@ async function mapItemRow(db: SQLiteDatabase, row: LifeItemRow): Promise<LifeIte
   };
 }
 
+async function mapItemRow(db: SQLiteDatabase, row: LifeItemRow): Promise<LifeItem> {
+  const reminderRows = await db.getAllAsync<ReminderRow>('SELECT * FROM reminders WHERE item_id = ? ORDER BY days_before DESC', row.id);
+  return buildLifeItem(row, reminderRows.map(mapReminderRow));
+}
+
 async function getItemById(db: SQLiteDatabase, id: string): Promise<LifeItem | null> {
   const row = await db.getFirstAsync<LifeItemRow>('SELECT * FROM life_items WHERE id = ?', id);
   return row ? mapItemRow(db, row) : null;
+}
+
+/**
+ * Batches the reminders lookup for every row into a single query instead of
+ * one `SELECT ... WHERE item_id = ?` per item — `listItems()` previously ran
+ * N+1 queries (one per life item) on every screen that lists items.
+ */
+async function mapItemRows(db: SQLiteDatabase, rows: LifeItemRow[]): Promise<LifeItem[]> {
+  if (rows.length === 0) return [];
+  const placeholders = rows.map(() => '?').join(', ');
+  const reminderRows = await db.getAllAsync<ReminderRow>(
+    `SELECT * FROM reminders WHERE item_id IN (${placeholders}) ORDER BY days_before DESC`,
+    ...rows.map((row) => row.id),
+  );
+  const remindersByItemId = new Map<string, LifeItemReminder[]>();
+  for (const reminderRow of reminderRows) {
+    const list = remindersByItemId.get(reminderRow.item_id) ?? [];
+    list.push(mapReminderRow(reminderRow));
+    remindersByItemId.set(reminderRow.item_id, list);
+  }
+  return rows.map((row) => buildLifeItem(row, remindersByItemId.get(row.id) ?? []));
 }
 
 async function getSettingValue<T>(db: SQLiteDatabase, key: string, fallback: T): Promise<T> {
@@ -183,9 +208,7 @@ export const lifeItemsRepository: LifeItemsRepository = {
   async listItems() {
     const db = await getDatabase();
     const rows = await db.getAllAsync<LifeItemRow>('SELECT * FROM life_items ORDER BY due_date ASC');
-    const items: LifeItem[] = [];
-    for (const row of rows) items.push(await mapItemRow(db, row));
-    return items;
+    return mapItemRows(db, rows);
   },
 
   async getItem(id) {
@@ -343,9 +366,11 @@ export const lifeItemsRepository: LifeItemsRepository = {
 
   async getCompletionHistory(itemId, limit) {
     const db = await getDatabase();
-    const rows = await db.getAllAsync<HistoryRow>('SELECT * FROM completion_history WHERE item_id = ? ORDER BY completed_at DESC', itemId);
-    const entries = rows.map(mapHistoryRow);
-    return typeof limit === 'number' ? entries.slice(0, limit) : entries;
+    const rows =
+      typeof limit === 'number'
+        ? await db.getAllAsync<HistoryRow>('SELECT * FROM completion_history WHERE item_id = ? ORDER BY completed_at DESC LIMIT ?', itemId, limit)
+        : await db.getAllAsync<HistoryRow>('SELECT * FROM completion_history WHERE item_id = ? ORDER BY completed_at DESC', itemId);
+    return rows.map(mapHistoryRow);
   },
 
   async replaceReminders(itemId, daysBefore) {
