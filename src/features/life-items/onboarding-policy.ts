@@ -22,3 +22,30 @@ export function resolveInitialOnboardingState(signals: OnboardingSignals): boole
   if (signals.storedValue !== null) return signals.storedValue;
   return signals.hasExistingData;
 }
+
+export type ExistingInstallSignals = {
+  itemCount: number;
+  historyCount: number;
+  /**
+   * `'not_needed'` means the legacy-JSON migration ran and found nothing to
+   * migrate — true for every fresh install, not just upgrades. It must NOT
+   * be treated as evidence of an existing install; only `'done'` (a legacy
+   * snapshot was actually migrated) or `'failed'` (one was found and an
+   * import was attempted) count.
+   */
+  legacyMigrationStatus: 'done' | 'not_needed' | 'failed' | 'none' | null;
+  hasItemsSeededSetting: boolean;
+};
+
+/**
+ * Whether this install had any real data before `onboarding_completed` was
+ * ever written. Feeds `resolveInitialOnboardingState`'s `hasExistingData`.
+ */
+export function resolveHasPreExistingData(signals: ExistingInstallSignals): boolean {
+  if (signals.itemCount > 0) return true;
+  if (signals.historyCount > 0) return true;
+  if (signals.legacyMigrationStatus === 'done') return true;
+  if (signals.legacyMigrationStatus === 'failed') return true;
+  if (signals.hasItemsSeededSetting) return true;
+  return false;
+}

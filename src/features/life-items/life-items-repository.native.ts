@@ -2,6 +2,7 @@ import { SQLiteDatabase } from 'expo-sqlite';
 
 import { getDatabase } from '@/features/database/database';
 import { resolveAnchorDayOnUpdate, resolveUndoState } from '@/features/life-items/date-utils';
+import { resolveHasPreExistingData } from '@/features/life-items/onboarding-policy';
 import { createId } from '@/features/life-items/id';
 import { LifeItemsRepository } from '@/features/life-items/life-items-repository-types';
 import { readLegacySnapshot, renameLegacySnapshotAfterMigration } from '@/features/life-items/life-items-storage.native';
@@ -410,12 +411,14 @@ export const lifeItemsRepository: LifeItemsRepository = {
   async hasPreExistingData() {
     const db = await getDatabase();
     const items = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM life_items');
-    if ((items?.count ?? 0) > 0) return true;
     const history = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM completion_history');
-    if ((history?.count ?? 0) > 0) return true;
-    const legacyStatus = await getSettingValue<string | null>(db, 'legacy_migration_status', null);
-    if (legacyStatus !== null) return true;
+    const legacyStatus = await getSettingValue<'done' | 'not_needed' | 'failed' | 'none' | null>(db, 'legacy_migration_status', null);
     const itemsSeeded = await getSettingValue<boolean | null>(db, 'items_seeded', null);
-    return itemsSeeded !== null;
+    return resolveHasPreExistingData({
+      itemCount: items?.count ?? 0,
+      historyCount: history?.count ?? 0,
+      legacyMigrationStatus: legacyStatus,
+      hasItemsSeededSetting: itemsSeeded !== null,
+    });
   },
 };

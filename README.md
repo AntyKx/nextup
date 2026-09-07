@@ -2,7 +2,15 @@
 
 一個 local-first 的生活週期管理 App，專門管理「該續、該換、該繳、該處理」的事情，而不是一般待辦清單。
 
-## 目前版本：0.4.1
+## 目前版本：0.4.2
+
+### 0.4.2 — Fresh Install Onboarding Hotfix
+
+修正 Native Fresh Install 因 `legacy_migration_status = 'not_needed'` 被誤判成舊安裝，導致直接跳過 Onboarding 的問題。
+
+- **`not_needed` ≠ existing install**：`migrateLegacyDataIfNeeded()` 在完全沒有舊 JSON 可搬的全新安裝時，也會寫入 `legacy_migration_status = 'not_needed'`（代表「沒有東西要搬」，不代表「這是舊使用者」）。但 `hasPreExistingData()` 先前只要看到這個設定值「存在」（`!== null`）就一律判定為既有安裝，導致每一次 Native 全新安裝都會被誤判成升級用戶，直接跳過 Onboarding。
+- **新增 `resolveHasPreExistingData()` 純函式**（`src/features/life-items/onboarding-policy.ts`）：明確只把 `'done'`（已搬移舊資料）、`'failed'`（偵測到舊資料但搬移失敗）、實際 item／history 筆數、或舊版 `items_seeded` 標記視為既有安裝的證據；`'not_needed'` 或完全沒有這個設定都不算。Native／Web repository 的 `hasPreExistingData()` 都改用這個共用函式。
+- 補上對應的 regression test，鎖住「Fresh Install 即使寫了 `not_needed` 仍會顯示 Onboarding」與既有升級使用者（有資料／有完成紀錄／舊 migration 完成／舊 seed 標記）仍會跳過 Onboarding 這兩條路徑。
 
 ### 0.4.1 — First-Run & Template Flow Fix
 

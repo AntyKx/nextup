@@ -3,6 +3,7 @@ import { createId } from '@/features/life-items/id';
 import { LifeItemsRepository } from '@/features/life-items/life-items-repository-types';
 import { getLegacyBlob, getStoredBlob, getV2Blob, setStoredBlob, WebBlob } from '@/features/life-items/life-items-storage.web';
 import { CompletionHistoryEntry, LifeItem, UpdateLifeItemInput } from '@/features/life-items/life-items-types';
+import { resolveHasPreExistingData } from '@/features/life-items/onboarding-policy';
 
 let blob: WebBlob | null = null;
 
@@ -256,8 +257,16 @@ export const lifeItemsRepository: LifeItemsRepository = {
 
   async hasPreExistingData() {
     const current = requireBlob();
-    if (current.items.length > 0 || current.completionHistory.length > 0) return true;
-    // A legacy v1/v2 snapshot existing at all means this install has history, even if it happens to be empty right now.
-    return getLegacyBlob() !== null || getV2Blob() !== null;
+    // A legacy v1/v2 snapshot existing at all means this install has history,
+    // even if it happens to be empty right now — web has no 'not_needed'
+    // marker (there's no persisted migration-status setting), so "a legacy
+    // blob was found" maps directly to 'done'.
+    const legacyMigrationStatus = getLegacyBlob() !== null || getV2Blob() !== null ? 'done' : null;
+    return resolveHasPreExistingData({
+      itemCount: current.items.length,
+      historyCount: current.completionHistory.length,
+      legacyMigrationStatus,
+      hasItemsSeededSetting: false,
+    });
   },
 };

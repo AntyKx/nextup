@@ -92,7 +92,7 @@ export default function SettingsScreen() {
 
           <Text style={styles.sectionTitle}>關於</Text>
           <View style={styles.panel}>
-            <SettingRow icon="calendar" title="下一件事 NextUp" description="Version 0.4.1" />
+            <SettingRow icon="calendar" title="下一件事 NextUp" description="Version 0.4.2" />
           </View>
 
           <View style={styles.promiseCard}>
