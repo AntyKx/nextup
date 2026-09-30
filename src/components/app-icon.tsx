@@ -23,7 +23,10 @@ export type AppIconName =
   | 'back'
   | 'edit'
   | 'trash'
-  | 'undo';
+  | 'undo'
+  | 'clock'
+  | 'export'
+  | 'import';
 
 const iconNames: Record<AppIconName, SymbolViewProps['name']> = {
   today: { ios: 'sun.max', android: 'today', web: 'today' },
@@ -48,6 +51,9 @@ const iconNames: Record<AppIconName, SymbolViewProps['name']> = {
   edit: { ios: 'pencil', android: 'edit', web: 'edit' },
   trash: { ios: 'trash', android: 'delete', web: 'delete' },
   undo: { ios: 'arrow.uturn.left', android: 'undo', web: 'undo' },
+  clock: { ios: 'clock', android: 'schedule', web: 'schedule' },
+  export: { ios: 'square.and.arrow.up', android: 'upload_file', web: 'upload_file' },
+  import: { ios: 'square.and.arrow.down', android: 'file_open', web: 'file_open' },
 };
 
 export function AppIcon({

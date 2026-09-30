@@ -9,7 +9,9 @@ import { categoryColors, fonts, palette } from '@/constants/design';
 import { daysUntil, timestampToLocalIsoDate } from '@/features/life-items/date-utils';
 import { useLifeItems } from '@/features/life-items/life-items-context';
 import { categoryMeta, CompletionHistoryEntry, recurrenceLabels, recurrenceModeLabels } from '@/features/life-items/life-items-types';
-import { formatDisplayDate, formatDueStatus, urgencyMeta } from '@/features/life-items/life-items-utils';
+import { formatDisplayDate, formatDisplayDateWithYear, formatDueStatus, urgencyMeta } from '@/features/life-items/life-items-utils';
+
+const HISTORY_PREVIEW_COUNT = 5;
 
 export default function ItemDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -17,11 +19,16 @@ export default function ItemDetailScreen() {
   const completeWithUndo = useCompleteWithUndo();
   const item = items.find((candidate) => candidate.id === id);
   const [history, setHistory] = useState<CompletionHistoryEntry[]>([]);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   useEffect(() => {
     if (!item) return;
-    getCompletionHistory(item.id, 5).then(setHistory);
+    // Loads every row (a yearly item accrues one a year — this stays tiny)
+    // so the count on "show all" is exact without a second query.
+    getCompletionHistory(item.id).then(setHistory);
   }, [item, getCompletionHistory]);
+
+  const visibleHistory = showAllHistory ? history : history.slice(0, HISTORY_PREVIEW_COUNT);
 
   if (!item) {
     return (
@@ -130,16 +137,25 @@ export default function ItemDetailScreen() {
           <Text style={styles.sectionLabel}>完成紀錄</Text>
           <View style={styles.panel}>
             {history.length ? (
-              history.map((entry, index) => (
+              visibleHistory.map((entry, index) => (
                 <View key={entry.id}>
                   {index > 0 ? <Divider /> : null}
-                  <Row label={formatDisplayDate(entry.scheduledDate)} value={`${formatDisplayDate(timestampToLocalIsoDate(entry.completedAt))} 完成`} />
+                  <Row label={formatDisplayDateWithYear(entry.scheduledDate)} value={`${formatCompletedOn(entry)} 完成`} />
                 </View>
               ))
             ) : (
               <Text style={styles.emptyInline}>還沒有完成紀錄</Text>
             )}
           </View>
+          {history.length > HISTORY_PREVIEW_COUNT ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setShowAllHistory((value) => !value)}
+              hitSlop={8}
+              style={styles.historyToggle}>
+              <Text style={styles.historyToggleText}>{showAllHistory ? '收合' : `顯示全部 ${history.length} 筆`}</Text>
+            </Pressable>
+          ) : null}
 
           <View style={styles.actions}>
             {!item.completedAt ? (
@@ -165,6 +181,12 @@ export default function ItemDetailScreen() {
       </SafeAreaView>
     </View>
   );
+}
+
+/** Completion date, adding the year only when it differs from the scheduled date's (e.g. a Dec 31 item done on Jan 2). */
+function formatCompletedOn(entry: CompletionHistoryEntry): string {
+  const completedDate = timestampToLocalIsoDate(entry.completedAt);
+  return completedDate.slice(0, 4) === entry.scheduledDate.slice(0, 4) ? formatDisplayDate(completedDate) : formatDisplayDateWithYear(completedDate);
 }
 
 function Header({ title, onEdit }: { title: string; onEdit?: () => void }) {
@@ -225,6 +247,8 @@ const styles = StyleSheet.create({
   reminderChipText: { color: palette.muted, fontSize: 12, fontFamily: fonts.bodySemibold },
   emptyInline: { color: palette.subtle, fontSize: 12.5, fontFamily: fonts.body, paddingVertical: 16, paddingHorizontal: 2 },
   noteText: { color: palette.ink, fontSize: 13.5, fontFamily: fonts.body, lineHeight: 20, paddingVertical: 14 },
+  historyToggle: { alignSelf: 'center', marginTop: 12, paddingVertical: 4, paddingHorizontal: 10 },
+  historyToggleText: { color: palette.accentDeep, fontSize: 12.5, fontFamily: fonts.bodySemibold },
   actions: { marginTop: 28, gap: 10 },
   primaryAction: { flexDirection: 'row', gap: 8, height: 52, borderRadius: 16, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
   primaryActionText: { color: palette.white, fontSize: 14.5, fontFamily: fonts.bodyBold },

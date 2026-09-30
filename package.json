@@ -1,7 +1,7 @@
 {
   "name": "nextup",
   "main": "expo-router/entry",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "dependencies": {
     "@expo-google-fonts/geist": "^0.4.2",
     "@expo-google-fonts/noto-sans-tc": "^0.4.3",
@@ -10,6 +10,7 @@
     "expo": "~57.0.19",
     "expo-constants": "~57.0.17",
     "expo-device": "~57.0.1",
+    "expo-document-picker": "~57.0.3",
     "expo-file-system": "~57.0.6",
     "expo-font": "~57.0.3",
     "expo-glass-effect": "~57.0.1",
@@ -17,6 +18,7 @@
     "expo-linking": "~57.0.9",
     "expo-notifications": "~57.0.16",
     "expo-router": "~57.0.18",
+    "expo-sharing": "~57.0.22",
     "expo-splash-screen": "~57.0.8",
     "expo-sqlite": "~57.0.2",
     "expo-status-bar": "~57.0.1",
@@ -49,7 +51,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "tsx --test src/features/life-items/date-utils.test.ts src/features/life-items/onboarding-policy.test.ts src/features/notifications/notification-policy.test.ts src/features/templates/template-utils.test.ts"
+    "test": "tsx --test src/features/life-items/date-utils.test.ts src/features/life-items/onboarding-policy.test.ts src/features/notifications/notification-policy.test.ts src/features/templates/template-utils.test.ts src/features/backup/backup-format.test.ts"
   },
   "private": true
 }

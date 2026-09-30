@@ -1,5 +1,6 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 
+import { backupItemToLifeItem } from '@/features/backup/backup-format';
 import { getDatabase } from '@/features/database/database';
 import { resolveAnchorDayOnUpdate, resolveUndoState } from '@/features/life-items/date-utils';
 import { resolveHasPreExistingData } from '@/features/life-items/onboarding-policy';
@@ -372,6 +373,37 @@ export const lifeItemsRepository: LifeItemsRepository = {
         ? await db.getAllAsync<HistoryRow>('SELECT * FROM completion_history WHERE item_id = ? ORDER BY completed_at DESC LIMIT ?', itemId, limit)
         : await db.getAllAsync<HistoryRow>('SELECT * FROM completion_history WHERE item_id = ? ORDER BY completed_at DESC', itemId);
     return rows.map(mapHistoryRow);
+  },
+
+  async listAllCompletionHistory() {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<HistoryRow>('SELECT * FROM completion_history ORDER BY completed_at ASC');
+    return rows.map(mapHistoryRow);
+  },
+
+  async importItems(items, history) {
+    const db = await getDatabase();
+    await db.withTransactionAsync(async () => {
+      for (const item of items) {
+        await insertItemWithReminders(db, backupItemToLifeItem(item, () => createId('reminder')));
+      }
+      for (const entry of history) {
+        await db.runAsync(
+          `INSERT INTO completion_history
+            (id, item_id, scheduled_date, completed_at, note, previous_due_date, previous_anchor_day, previous_completed_at, previous_last_completed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          entry.id,
+          entry.itemId,
+          entry.scheduledDate,
+          entry.completedAt,
+          entry.note,
+          entry.previousDueDate,
+          entry.previousAnchorDay,
+          entry.previousCompletedAt,
+          entry.previousLastCompletedAt,
+        );
+      }
+    });
   },
 
   async replaceReminders(itemId, daysBefore) {

@@ -1,14 +1,17 @@
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { showSnackbar } from '@/components/snackbar';
+import { appVersion } from '@/constants/app-info';
 import * as lifeItemsService from '@/features/life-items/life-items-service';
 import { CompletionHistoryEntry, LifeItem, LifeItemReminder, NewLifeItemInput, UpdateLifeItemInput } from '@/features/life-items/life-items-types';
+import { DEFAULT_NOTIFICATION_TIME, NotificationTime } from '@/features/notifications/notification-policy';
 
 type LifeItemsContextValue = {
   items: LifeItem[];
   isLoading: boolean;
   error: string | null;
   notificationsEnabled: boolean;
+  notificationTime: NotificationTime;
   /** null while still loading — callers should treat that the same as "not decided yet", not as false. */
   onboardingCompleted: boolean | null;
   addItem: (item: NewLifeItemInput) => Promise<void>;
@@ -20,6 +23,10 @@ type LifeItemsContextValue = {
   updateReminderSchedule: (itemId: string, daysBefore: number[]) => Promise<LifeItemReminder[]>;
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
   setOnboardingCompleted: (completed: boolean) => Promise<void>;
+  setNotificationTime: (time: NotificationTime) => Promise<void>;
+  exportBackup: () => Promise<{ json: string; itemCount: number }>;
+  /** Throws `InvalidBackupError` (user-facing message) for a bad file; returns the result copy otherwise. */
+  importBackup: (raw: string) => Promise<string>;
 };
 
 const LifeItemsContext = createContext<LifeItemsContextValue | null>(null);
@@ -30,6 +37,7 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const [notificationsEnabled, setNotificationsEnabledState] = useState(false);
   const [onboardingCompleted, setOnboardingCompletedState] = useState<boolean | null>(null);
+  const [notificationTime, setNotificationTimeState] = useState<NotificationTime>(DEFAULT_NOTIFICATION_TIME);
 
   const refresh = useCallback(async () => {
     const next = await lifeItemsService.listItems();
@@ -45,6 +53,7 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
         if (!active) return;
         setItems(initial);
         setNotificationsEnabledState(await lifeItemsService.getNotificationsEnabled());
+        setNotificationTimeState(await lifeItemsService.getNotificationTime());
         setOnboardingCompletedState(await lifeItemsService.getOnboardingCompleted());
         setIsLoading(false);
         await lifeItemsService.syncNotificationsOnce();
@@ -159,12 +168,30 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
     setOnboardingCompletedState(completed);
   }, []);
 
+  const setNotificationTime = useCallback(async (time: NotificationTime) => {
+    const { notificationWarning } = await lifeItemsService.setNotificationTime(time);
+    setNotificationTimeState(time);
+    if (notificationWarning) showSnackbar({ message: notificationWarning });
+  }, []);
+
+  const exportBackup = useCallback(() => lifeItemsService.exportBackup(appVersion), []);
+
+  const importBackup = useCallback(
+    async (raw: string) => {
+      const { message, importedCount, notificationWarning } = await lifeItemsService.importBackup(raw);
+      if (importedCount > 0) await refresh();
+      return notificationWarning ? `${message}。${notificationWarning}` : message;
+    },
+    [refresh],
+  );
+
   const value = useMemo(
     () => ({
       items,
       isLoading,
       error,
       notificationsEnabled,
+      notificationTime,
       onboardingCompleted,
       addItem,
       updateItem,
@@ -175,12 +202,16 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
       updateReminderSchedule,
       setNotificationsEnabled,
       setOnboardingCompleted,
+      setNotificationTime,
+      exportBackup,
+      importBackup,
     }),
     [
       items,
       isLoading,
       error,
       notificationsEnabled,
+      notificationTime,
       onboardingCompleted,
       addItem,
       updateItem,
@@ -191,6 +222,9 @@ export function LifeItemsProvider({ children }: PropsWithChildren) {
       updateReminderSchedule,
       setNotificationsEnabled,
       setOnboardingCompleted,
+      setNotificationTime,
+      exportBackup,
+      importBackup,
     ],
   );
 

@@ -19,6 +19,11 @@ export function formatDisplayDate(value: string) {
   return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
 }
 
+/** With the year — for completion history, where a yearly item's rows would otherwise all read the same date. */
+export function formatDisplayDateWithYear(value: string) {
+  return `${parseLocalDate(value).getFullYear()} 年 ${formatDisplayDate(value)}`;
+}
+
 export function sortByDueDate(a: LifeItem, b: LifeItem) {
   return a.dueDate.localeCompare(b.dueDate);
 }

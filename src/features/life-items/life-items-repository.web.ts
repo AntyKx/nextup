@@ -1,3 +1,4 @@
+import { backupItemToLifeItem } from '@/features/backup/backup-format';
 import { resolveAnchorDayOnUpdate, resolveUndoState } from '@/features/life-items/date-utils';
 import { createId } from '@/features/life-items/id';
 import { LifeItemsRepository } from '@/features/life-items/life-items-repository-types';
@@ -218,6 +219,19 @@ export const lifeItemsRepository: LifeItemsRepository = {
       .completionHistory.filter((entry) => entry.itemId === itemId)
       .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
     return typeof limit === 'number' ? entries.slice(0, limit) : entries;
+  },
+
+  async listAllCompletionHistory() {
+    return [...requireBlob().completionHistory].sort((a, b) => a.completedAt.localeCompare(b.completedAt));
+  },
+
+  async importItems(items, history) {
+    const current = requireBlob();
+    await commit({
+      ...current,
+      items: [...current.items, ...items.map((item) => backupItemToLifeItem(item, () => createId('reminder')))],
+      completionHistory: [...current.completionHistory, ...history],
+    });
   },
 
   async replaceReminders(itemId, daysBefore) {

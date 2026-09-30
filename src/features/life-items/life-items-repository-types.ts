@@ -1,3 +1,4 @@
+import { BackupItem } from '@/features/backup/backup-format';
 import {
   CompletionHistoryEntry,
   LifeItem,
@@ -34,6 +35,10 @@ export interface LifeItemsRepository {
   applyCompletion(itemId: string, args: ApplyCompletionArgs): Promise<{ item: LifeItem; history: CompletionHistoryEntry }>;
   undoCompletion(historyId: string): Promise<LifeItem>;
   getCompletionHistory(itemId: string, limit?: number): Promise<CompletionHistoryEntry[]>;
+  /** Every history row across all items — only for building a backup. */
+  listAllCompletionHistory(): Promise<CompletionHistoryEntry[]>;
+  /** Inserts items (with fresh reminder rows) and their history in one all-or-nothing write. Callers must already have filtered out IDs that exist. */
+  importItems(items: BackupItem[], history: CompletionHistoryEntry[]): Promise<void>;
   replaceReminders(itemId: string, daysBefore: number[]): Promise<LifeItemReminder[]>;
   setReminderNotificationId(reminderId: string, notificationId: string | null): Promise<void>;
   getSetting<T>(key: string, fallback: T): Promise<T>;

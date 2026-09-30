@@ -2,7 +2,7 @@
   "expo": {
     "name": "下一件事 NextUp",
     "slug": "nextup",
-    "version": "0.4.2",
+    "version": "0.5.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "nextup",
@@ -40,7 +40,8 @@
         {
           "color": "#BE6A42"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

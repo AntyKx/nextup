@@ -6,6 +6,8 @@ import { AppIcon } from '@/components/app-icon';
 import { DateField } from '@/components/date-field';
 import { categoryColors, fonts, palette } from '@/constants/design';
 import { addDays, formatIsoDate } from '@/features/life-items/date-utils';
+import { useLifeItems } from '@/features/life-items/life-items-context';
+import { formatNotificationTime } from '@/features/notifications/notification-policy';
 import {
   Category,
   categoryMeta,
@@ -53,6 +55,7 @@ export function LifeItemForm({
   submitLabel: string;
   isEditing?: boolean;
 }) {
+  const { notificationTime } = useLifeItems();
   const [title, setTitle] = useState(initialValue?.title ?? '');
   const [category, setCategory] = useState<Category>(initialValue?.category ?? 'home');
   // Editing (or a template with a defaultOffsetDays) always supplies a real
@@ -224,7 +227,7 @@ export function LifeItemForm({
           </Pressable>
         )}
       </View>
-      <Text style={styles.reminderHint}>提醒會在當天上午 9:00 發送</Text>
+      <Text style={styles.reminderHint}>提醒會在當天{formatNotificationTime(notificationTime)} 發送，可在設定中更改</Text>
 
       <Text style={styles.sectionLabel}>分類</Text>
       <View style={styles.categoryGrid}>

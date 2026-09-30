@@ -2,7 +2,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { describeEnableWarning, describeScheduleWarning, mergeScheduleResults, shouldScheduleNotifications } from './notification-policy';
+import {
+  DEFAULT_NOTIFICATION_TIME,
+  describeBulkScheduleWarning,
+  describeEnableWarning,
+  describeScheduleWarning,
+  formatNotificationTime,
+  isSameNotificationTime,
+  mergeScheduleResults,
+  normalizeNotificationTime,
+  NOTIFICATION_TIME_OPTIONS,
+  shouldScheduleNotifications,
+} from './notification-policy';
 
 test('shouldScheduleNotifications: only true when enabled and the item is not completed', () => {
   assert.equal(shouldScheduleNotifications(true, null), true);
@@ -53,4 +64,40 @@ test('mergeScheduleResults: aggregates multiple results field-by-field', () => {
 
 test('mergeScheduleResults: no arguments returns an empty result', () => {
   assert.deepEqual(mergeScheduleResults(), { scheduled: 0, failed: 0, skippedPast: 0 });
+});
+
+test('normalizeNotificationTime: keeps a valid stored time', () => {
+  assert.deepEqual(normalizeNotificationTime({ hour: 20, minute: 30 }), { hour: 20, minute: 30 });
+  assert.deepEqual(normalizeNotificationTime({ hour: 0, minute: 0 }), { hour: 0, minute: 0 });
+});
+
+test('normalizeNotificationTime: falls back to 9:00 for missing or out-of-range values', () => {
+  assert.deepEqual(normalizeNotificationTime(null), DEFAULT_NOTIFICATION_TIME);
+  assert.deepEqual(normalizeNotificationTime('09:00'), DEFAULT_NOTIFICATION_TIME);
+  assert.deepEqual(normalizeNotificationTime({ hour: 24, minute: 0 }), DEFAULT_NOTIFICATION_TIME);
+  assert.deepEqual(normalizeNotificationTime({ hour: 8, minute: 60 }), DEFAULT_NOTIFICATION_TIME);
+  assert.deepEqual(normalizeNotificationTime({ hour: 8.5, minute: 0 }), DEFAULT_NOTIFICATION_TIME);
+  assert.deepEqual(normalizeNotificationTime({ hour: 8 }), DEFAULT_NOTIFICATION_TIME);
+});
+
+test('formatNotificationTime: 12-hour clock with a Chinese day-period word', () => {
+  assert.equal(formatNotificationTime({ hour: 9, minute: 0 }), '上午 9:00');
+  assert.equal(formatNotificationTime({ hour: 12, minute: 0 }), '中午 12:00');
+  assert.equal(formatNotificationTime({ hour: 15, minute: 5 }), '下午 3:05');
+  assert.equal(formatNotificationTime({ hour: 20, minute: 0 }), '晚上 8:00');
+  assert.equal(formatNotificationTime({ hour: 0, minute: 30 }), '凌晨 12:30');
+});
+
+test('NOTIFICATION_TIME_OPTIONS: includes the 9:00 default so it always shows as selected', () => {
+  assert.ok(NOTIFICATION_TIME_OPTIONS.some((option) => isSameNotificationTime(option, DEFAULT_NOTIFICATION_TIME)));
+});
+
+test('describeBulkScheduleWarning: overdue items with no future reminder are not a warning', () => {
+  assert.equal(describeBulkScheduleWarning({ scheduled: 3, failed: 0, skippedPast: 5 }), undefined);
+  assert.equal(describeBulkScheduleWarning({ scheduled: 0, failed: 0, skippedPast: 5 }), undefined);
+});
+
+test('describeBulkScheduleWarning: real failures are reported', () => {
+  assert.equal(describeBulkScheduleWarning({ scheduled: 0, failed: 2, skippedPast: 0 }), '提醒未能排程，請稍後再試');
+  assert.equal(describeBulkScheduleWarning({ scheduled: 4, failed: 1, skippedPast: 0 }), '有部分提醒未能排程');
 });

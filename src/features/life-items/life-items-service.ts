@@ -1,3 +1,4 @@
+import { buildBackup, describeImportResult, parseBackup, planImport } from '@/features/backup/backup-format';
 import { calculateNextDueDate, formatIsoDate, parseLocalDate } from '@/features/life-items/date-utils';
 import { resolveInitialOnboardingState } from '@/features/life-items/onboarding-policy';
 import { lifeItemsRepository } from '@/features/life-items/life-items-repository';
@@ -9,7 +10,15 @@ import {
   UpdateLifeItemInput,
 } from '@/features/life-items/life-items-types';
 import * as notificationService from '@/features/notifications/notification-service';
-import { emptyScheduleResult, mergeScheduleResults, ScheduleResult, shouldScheduleNotifications } from '@/features/notifications/notification-policy';
+import {
+  describeBulkScheduleWarning,
+  emptyScheduleResult,
+  mergeScheduleResults,
+  NotificationTime,
+  normalizeNotificationTime,
+  ScheduleResult,
+  shouldScheduleNotifications,
+} from '@/features/notifications/notification-policy';
 
 const persistNotificationId = (reminderId: string, notificationId: string | null) =>
   lifeItemsRepository.setReminderNotificationId(reminderId, notificationId);
@@ -26,7 +35,7 @@ const inFlightCompletions = new Set<string>();
 async function scheduleIfEnabled(item: LifeItem): Promise<ScheduleResult> {
   const enabled = await getNotificationsEnabled();
   if (!shouldScheduleNotifications(enabled, item.completedAt)) return emptyScheduleResult();
-  return notificationService.scheduleItemNotifications(item, persistNotificationId);
+  return notificationService.scheduleItemNotifications(item, persistNotificationId, await getNotificationTime());
 }
 
 /** Like `scheduleIfEnabled`, but also guarantees no stray OS notification survives when the switch is off. */
@@ -36,7 +45,20 @@ async function rescheduleIfEnabled(item: LifeItem): Promise<ScheduleResult> {
     await notificationService.cancelItemNotifications(item);
     return emptyScheduleResult();
   }
-  return notificationService.rescheduleItemNotifications(item, persistNotificationId);
+  return notificationService.rescheduleItemNotifications(item, persistNotificationId, await getNotificationTime());
+}
+
+/** Reschedules every active item at the current notification time — used when the switch turns on or the time changes. */
+async function rescheduleAllActive(): Promise<ScheduleResult> {
+  const items = await lifeItemsRepository.listItems();
+  const time = await getNotificationTime();
+  const results: ScheduleResult[] = [];
+  for (const item of items) {
+    if (shouldScheduleNotifications(true, item.completedAt)) {
+      results.push(await notificationService.rescheduleItemNotifications(item, persistNotificationId, time));
+    }
+  }
+  return mergeScheduleResults(...results);
 }
 
 export async function init(): Promise<LifeItem[]> {
@@ -178,28 +200,33 @@ export async function getNotificationsEnabled(): Promise<boolean> {
 
 export async function setNotificationsEnabled(enabled: boolean): Promise<{ notificationWarning?: string }> {
   await lifeItemsRepository.setSetting('notifications_enabled', enabled);
-  const items = await lifeItemsRepository.listItems();
   if (enabled) {
-    const results: ScheduleResult[] = [];
-    for (const item of items) {
-      if (shouldScheduleNotifications(true, item.completedAt)) {
-        results.push(await notificationService.rescheduleItemNotifications(item, persistNotificationId));
-      }
-    }
     // The user's intent (turn notifications on) is still honored even if
     // some items couldn't be scheduled — the switch stays ON, but they're
     // told which reminders need attention.
-    return { notificationWarning: notificationService.describeEnableWarning(mergeScheduleResults(...results)) };
+    return { notificationWarning: notificationService.describeEnableWarning(await rescheduleAllActive()) };
   }
-  await notificationService.cancelAllTracked(items, persistNotificationId);
+  await notificationService.cancelAllTracked(await lifeItemsRepository.listItems(), persistNotificationId);
   return {};
+}
+
+export async function getNotificationTime(): Promise<NotificationTime> {
+  return normalizeNotificationTime(await lifeItemsRepository.getSetting<unknown>('notification_time', null));
+}
+
+export async function setNotificationTime(time: NotificationTime): Promise<{ notificationWarning?: string }> {
+  await lifeItemsRepository.setSetting('notification_time', normalizeNotificationTime(time));
+  // With reminders off there's nothing scheduled to move — the new time
+  // just applies the next time they're turned on.
+  if (!(await getNotificationsEnabled())) return {};
+  return { notificationWarning: describeBulkScheduleWarning(await rescheduleAllActive()) };
 }
 
 export async function syncNotificationsOnce(): Promise<void> {
   const enabled = await getNotificationsEnabled();
   if (!enabled) return;
   const items = await lifeItemsRepository.listItems();
-  await notificationService.syncNotifications(items, persistNotificationId);
+  await notificationService.syncNotifications(items, persistNotificationId, await getNotificationTime());
 }
 
 export async function getOnboardingCompleted(): Promise<boolean> {
@@ -216,6 +243,40 @@ export async function getOnboardingCompleted(): Promise<boolean> {
 
 export async function setOnboardingCompleted(completed: boolean): Promise<void> {
   await lifeItemsRepository.setSetting('onboarding_completed', completed);
+}
+
+export async function exportBackup(appVersion: string): Promise<{ json: string; itemCount: number }> {
+  const items = await lifeItemsRepository.listItems();
+  const completionHistory = await lifeItemsRepository.listAllCompletionHistory();
+  const backup = buildBackup({ items, completionHistory, exportedAt: new Date().toISOString(), appVersion });
+  return { json: JSON.stringify(backup, null, 2), itemCount: items.length };
+}
+
+export class InvalidBackupError extends Error {}
+
+/**
+ * Merge-only import (see `planImport`): nothing already on this device is
+ * overwritten. Throws `InvalidBackupError` (user-facing message) for a file
+ * that isn't a valid backup — the database is untouched in that case.
+ */
+export async function importBackup(raw: string): Promise<{ message: string; importedCount: number; notificationWarning?: string }> {
+  const parsed = parseBackup(raw);
+  if (!parsed.ok) throw new InvalidBackupError(parsed.error);
+  const existing = await lifeItemsRepository.listItems();
+  const plan = planImport(parsed.backup, new Set(existing.map((item) => item.id)));
+  if (plan.items.length > 0) {
+    await lifeItemsRepository.importItems(plan.items, plan.completionHistory);
+  }
+  const results: ScheduleResult[] = [];
+  for (const { id } of plan.items) {
+    const item = await lifeItemsRepository.getItem(id);
+    if (item) results.push(await scheduleIfEnabled(item));
+  }
+  return {
+    message: describeImportResult(plan.items.length, plan.skippedCount),
+    importedCount: plan.items.length,
+    notificationWarning: describeBulkScheduleWarning(mergeScheduleResults(...results)),
+  };
 }
 
 export { AlreadyInFlightError };
