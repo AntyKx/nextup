@@ -47,8 +47,8 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "tsx --test src/features/life-items/date-utils.test.ts src/features/life-items/onboarding-policy.test.ts src/features/notifications/notification-policy.test.ts src/features/templates/template-utils.test.ts src/features/backup/backup-format.test.ts"

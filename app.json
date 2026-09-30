@@ -11,6 +11,7 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.antykx.nextup",
       "adaptiveIcon": {
         "backgroundColor": "#F0DDBE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
