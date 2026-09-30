@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { Redirect, router } from 'expo-router';
 import { useMemo } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -7,7 +8,7 @@ import { AppIcon } from '@/components/app-icon';
 import { BottomNav } from '@/components/bottom-nav';
 import { LifeItemCard } from '@/components/life-item-card';
 import { useCompleteWithUndo } from '@/components/use-complete-with-undo';
-import { fonts, palette } from '@/constants/design';
+import { fonts, palette, radius } from '@/constants/design';
 import { useLifeItems } from '@/features/life-items/life-items-context';
 import { daysUntil, formatDueStatus, sortByDueDate } from '@/features/life-items/life-items-utils';
 
@@ -44,10 +45,16 @@ export default function HomeScreen() {
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <View>
+            <View style={styles.headerText}>
               <Text style={styles.date}>{todayLabel()}</Text>
               <Text style={styles.title}>今天</Text>
             </View>
+            <Image
+              source={require('../../assets/images/bears/bear-mark.png')}
+              style={styles.bearMark}
+              contentFit="contain"
+              accessibilityIgnoresInvertColors
+            />
             <Pressable
               accessibilityLabel="設定"
               onPress={() => router.push('/settings')}
@@ -131,9 +138,12 @@ export default function HomeScreen() {
 function HomeEmptyState() {
   return (
     <View style={styles.homeEmpty}>
-      <View style={styles.homeEmptyIcon}>
-        <AppIcon name="calendar" size={24} color={palette.accent} />
-      </View>
+      <Image
+        source={require('../../assets/images/bears/bear-empty.png')}
+        style={styles.homeEmptyBear}
+        contentFit="contain"
+        accessibilityIgnoresInvertColors
+      />
       <Text style={styles.homeEmptyTitle}>還沒有需要記住的下一件事</Text>
       <Text style={styles.homeEmptyMessage}>從護照、保險、濾芯或訂閱開始。</Text>
       <View style={styles.homeEmptyActions}>
@@ -161,17 +171,19 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.canvas },
   content: { paddingHorizontal: 20, paddingTop: 14 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center' },
+  headerText: { flex: 1 },
   date: { color: palette.muted, fontSize: 12, fontFamily: fonts.bodySemibold, marginBottom: 5 },
   title: { color: palette.ink, fontSize: 34, fontFamily: fonts.display, letterSpacing: 0 },
-  iconButton: { width: 44, height: 44, borderRadius: 16, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, alignItems: 'center', justifyContent: 'center' },
+  bearMark: { width: 44, height: 44, marginRight: 10 },
+  iconButton: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.55 },
   intro: { color: palette.muted, fontSize: 14, lineHeight: 21, fontFamily: fonts.body, marginTop: 12, marginBottom: 24 },
-  errorBanner: { backgroundColor: '#F6E1D6', borderRadius: 14, padding: 14, marginBottom: 16 },
+  errorBanner: { backgroundColor: palette.dangerSoft, borderRadius: radius.md, padding: 14, marginBottom: 16 },
   errorText: { color: palette.danger, fontSize: 12.5, fontFamily: fonts.bodyMedium },
   overview: {
     backgroundColor: palette.surface,
-    borderRadius: 22,
+    borderRadius: radius.xl,
     padding: 20,
     borderWidth: 1,
     borderColor: palette.line,
@@ -182,10 +194,10 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   overviewTop: { flexDirection: 'row', alignItems: 'center' },
-  overviewIcon: { width: 40, height: 40, borderRadius: 13, backgroundColor: palette.accentSoft, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
+  overviewIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: palette.accentSoft, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
   overviewLabel: { color: palette.muted, fontSize: 13, fontFamily: fonts.bodyBold, flex: 1 },
   overviewMain: { flexDirection: 'row', alignItems: 'baseline', marginTop: 16 },
-  overviewNumber: { color: palette.ink, fontSize: 42, lineHeight: 46, fontFamily: fonts.display },
+  overviewNumber: { color: palette.ink, fontSize: 42, lineHeight: 46, fontFamily: fonts.numeric },
   overviewUnit: { color: palette.ink, fontSize: 14.5, fontFamily: fonts.bodySemibold, marginLeft: 8 },
   overdueText: { color: palette.danger, fontSize: 12.5, fontFamily: fonts.bodySemibold, marginTop: 10 },
   overviewDivider: { height: 1, backgroundColor: palette.line, marginVertical: 16 },
@@ -196,7 +208,7 @@ const styles = StyleSheet.create({
   seeAll: { color: palette.accent, fontSize: 12, fontFamily: fonts.bodyBold },
   listPanel: {
     backgroundColor: palette.surface,
-    borderRadius: 20,
+    borderRadius: radius.lg,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: palette.line,
@@ -208,13 +220,13 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: { height: 150 },
   homeEmpty: { paddingVertical: 30, paddingHorizontal: 12, alignItems: 'center' },
-  homeEmptyIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: palette.accentSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  homeEmptyBear: { width: 96, height: 96, marginBottom: 10 },
   homeEmptyTitle: { color: palette.ink, fontSize: 16, fontFamily: fonts.bodyBold, textAlign: 'center' },
   homeEmptyMessage: { color: palette.muted, fontSize: 12.5, fontFamily: fonts.body, marginTop: 6, textAlign: 'center' },
   homeEmptyActions: { flexDirection: 'row', gap: 10, marginTop: 22, width: '100%' },
-  homeEmptyPrimary: { flex: 1, height: 48, borderRadius: 14, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
+  homeEmptyPrimary: { flex: 1, height: 48, borderRadius: radius.md, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
   homeEmptyPrimaryText: { color: palette.white, fontSize: 13, fontFamily: fonts.bodyBold },
-  homeEmptySecondary: { flex: 1, height: 48, borderRadius: 14, backgroundColor: palette.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  homeEmptySecondary: { flex: 1, height: 48, borderRadius: radius.md, backgroundColor: palette.accentSoft, alignItems: 'center', justifyContent: 'center' },
   homeEmptySecondaryText: { color: palette.accentDeep, fontSize: 13, fontFamily: fonts.bodyBold },
   fab: { position: 'absolute', right: 20, bottom: 88, width: 54, height: 54, borderRadius: 27, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center', shadowColor: '#7A4423', shadowOpacity: 0.32, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 5 },
   fabPressed: { transform: [{ scale: 0.95 }], opacity: 0.9 },

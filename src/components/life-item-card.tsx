@@ -2,7 +2,7 @@ import { Href, router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/app-icon';
-import { categoryColors, fonts, palette } from '@/constants/design';
+import { categoryColors, fonts, palette, radius } from '@/constants/design';
 import { categoryMeta, LifeItem, recurrenceLabels } from '@/features/life-items/life-items-types';
 import { daysUntil, formatDisplayDate, urgencyMeta } from '@/features/life-items/life-items-utils';
 
@@ -17,7 +17,7 @@ export function LifeItemCard({
 }) {
   const completed = Boolean(item.completedAt);
   const days = daysUntil(item.dueDate);
-  const urgency = completed ? { color: palette.safe, background: '#E4E9DA' } : urgencyMeta(days);
+  const urgency = completed ? { color: palette.safe, background: palette.safeSoft } : urgencyMeta(days);
 
   return (
     <View style={[styles.row, showDivider && styles.divider]}>
@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
   row: { minHeight: 84, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' },
   divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.line },
   tapZone: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  iconBox: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 13 },
+  iconBox: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', marginRight: 13 },
   copy: { flex: 1, paddingRight: 10 },
   title: { color: palette.ink, fontSize: 15, fontFamily: fonts.bodyBold, letterSpacing: -0.15 },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 7, gap: 6 },
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
   countdown: { width: 42, alignItems: 'flex-end', marginRight: 12 },
   doneBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 4 },
   doneBadgeText: { color: palette.safe, fontSize: 11, fontFamily: fonts.bodySemibold },
-  dayNumber: { fontSize: 20, fontFamily: fonts.display, lineHeight: 22, letterSpacing: -0.2 },
+  dayNumber: { fontSize: 20, fontFamily: fonts.numeric, lineHeight: 22, letterSpacing: -0.2 },
   dayLabel: { color: palette.subtle, fontSize: 10, marginTop: 2, fontFamily: fonts.body },
   check: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: '#D9C6A6', alignItems: 'center', justifyContent: 'center' },
   checkPressed: { backgroundColor: palette.accentSoft, borderColor: palette.accent },

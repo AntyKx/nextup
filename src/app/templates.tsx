@@ -1,10 +1,11 @@
+import { Image } from 'expo-image';
 import { Href, router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/app-icon';
-import { categoryColors, fonts, palette } from '@/constants/design';
+import { categoryColors, fonts, palette, radius } from '@/constants/design';
 import { Category, categoryMeta } from '@/features/life-items/life-items-types';
 import { getTemplatesByCategory } from '@/features/templates/template-utils';
 import { LifeTemplate } from '@/features/templates/template-types';
@@ -44,7 +45,14 @@ export default function TemplatesScreen() {
             <AppIcon name="back" size={20} color={palette.ink} />
           </Pressable>
           <Text style={styles.headerTitle}>生活情境</Text>
-          <View style={styles.headerButton} />
+          <View style={styles.headerButton}>
+            <Image
+              source={require('../../assets/images/bears/bear-mark.png')}
+              style={styles.bearMark}
+              contentFit="contain"
+              accessibilityIgnoresInvertColors
+            />
+          </View>
         </View>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Text style={styles.subtitle}>把容易忘記的事先放進來</Text>
@@ -124,16 +132,17 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.line },
   headerButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  bearMark: { width: 30, height: 30 },
   headerTitle: { color: palette.ink, fontSize: 15, fontFamily: fonts.bodyBold },
   content: { paddingHorizontal: 20, paddingTop: 18 },
   subtitle: { color: palette.muted, fontSize: 13, fontFamily: fonts.body, marginBottom: 16 },
   pressed: { opacity: 0.55 },
   filters: { gap: 8, paddingBottom: 20 },
-  filterChip: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 16 },
+  filterChip: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 15, paddingVertical: 8, borderRadius: radius.lg },
   filterText: { color: palette.muted, fontSize: 12, fontFamily: fonts.bodySemibold },
   listPanel: {
     backgroundColor: palette.surface,
-    borderRadius: 20,
+    borderRadius: radius.lg,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: palette.line,
@@ -145,7 +154,7 @@ const styles = StyleSheet.create({
   },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: palette.line },
   templateRow: { minHeight: 78, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' },
-  templateIconBox: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 13 },
+  templateIconBox: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', marginRight: 13 },
   templateCopy: { flex: 1, paddingRight: 10 },
   templateTitle: { color: palette.ink, fontSize: 14.5, fontFamily: fonts.bodyBold, marginBottom: 4 },
   templateDescription: { color: palette.muted, fontSize: 12, lineHeight: 17, fontFamily: fonts.body },

@@ -24,9 +24,9 @@ export function sortByDueDate(a: LifeItem, b: LifeItem) {
 }
 
 export function urgencyMeta(days: number) {
-  if (days <= 7) return { color: palette.danger, background: '#F6E1D6' };
-  if (days <= 30) return { color: palette.warning, background: '#F3E7C9' };
-  return { color: palette.safe, background: '#E4E9DA' };
+  if (days <= 7) return { color: palette.danger, background: palette.dangerSoft };
+  if (days <= 30) return { color: palette.warning, background: palette.warningSoft };
+  return { color: palette.safe, background: palette.safeSoft };
 }
 
 /** "已逾期 N 天" / "今天到期" / "還有 N 天" — the one place overdue/today/future phrasing is decided. */

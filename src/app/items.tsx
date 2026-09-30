@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -8,7 +9,7 @@ import { BottomNav } from '@/components/bottom-nav';
 import { EmptyState } from '@/components/empty-state';
 import { LifeItemCard } from '@/components/life-item-card';
 import { useCompleteWithUndo } from '@/components/use-complete-with-undo';
-import { categoryColors, fonts, palette } from '@/constants/design';
+import { categoryColors, fonts, palette, radius } from '@/constants/design';
 import { useLifeItems } from '@/features/life-items/life-items-context';
 import { Category, categoryMeta } from '@/features/life-items/life-items-types';
 import { sortByDueDate } from '@/features/life-items/life-items-utils';
@@ -34,10 +35,16 @@ export default function ItemsScreen() {
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.headerRow}>
-            <View>
+            <View style={styles.headerText}>
               <Text style={styles.caption}>生活裡的重要小事</Text>
               <Text style={styles.title}>全部事項</Text>
             </View>
+            <Image
+              source={require('../../assets/images/bears/bear-mark.png')}
+              style={styles.bearMark}
+              contentFit="contain"
+              accessibilityIgnoresInvertColors
+            />
             <Pressable
               accessibilityLabel="新增事項"
               onPress={() => router.push('/add')}
@@ -119,21 +126,23 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: palette.canvas },
   safeArea: { flex: 1 },
   content: { paddingTop: 20 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 },
+  headerText: { flex: 1 },
   caption: { color: palette.muted, fontSize: 12, fontFamily: fonts.bodyMedium, marginBottom: 5 },
   title: { color: palette.ink, fontSize: 32, fontFamily: fonts.display },
-  addButton: { width: 44, height: 44, borderRadius: 16, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
+  bearMark: { width: 40, height: 40, marginRight: 10 },
+  addButton: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.55 },
   statusRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 22 },
   filters: { gap: 8, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 22 },
-  filterChip: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 16 },
+  filterChip: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 15, paddingVertical: 8, borderRadius: radius.lg },
   filterText: { color: palette.muted, fontSize: 12, fontFamily: fonts.bodySemibold },
   countRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 22, marginBottom: 10 },
   count: { color: palette.muted, fontSize: 12, fontFamily: fonts.bodyMedium },
   listPanel: {
     marginHorizontal: 20,
     backgroundColor: palette.surface,
-    borderRadius: 20,
+    borderRadius: radius.lg,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: palette.line,

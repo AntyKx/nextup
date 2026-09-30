@@ -1,4 +1,4 @@
-import { LXGWWenKaiTC_400Regular, LXGWWenKaiTC_700Bold } from '@expo-google-fonts/lxgw-wenkai-tc';
+import { Geist_700Bold } from '@expo-google-fonts/geist';
 import {
   NotoSansTC_400Regular,
   NotoSansTC_500Medium,
@@ -20,8 +20,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    LXGWWenKaiTC_400Regular,
-    LXGWWenKaiTC_700Bold,
+    Geist_700Bold,
     NotoSansTC_400Regular,
     NotoSansTC_500Medium,
     NotoSansTC_600SemiBold,
